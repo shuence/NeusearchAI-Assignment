@@ -2,7 +2,7 @@ import type { Product } from "@/types/product";
 
 export const dummyProducts: Product[] = [
   {
-    id: 1,
+    id: "1",
     title: "Premium Office Chair",
     price: 12999,
     description: "Ergonomic office chair with lumbar support",
@@ -23,7 +23,7 @@ export const dummyProducts: Product[] = [
     },
   },
   {
-    id: 2,
+    id: "2",
     title: "Modern Sofa Set",
     price: 45999,
     description: "3-seater sofa with premium fabric upholstery",
@@ -43,7 +43,7 @@ export const dummyProducts: Product[] = [
     },
   },
   {
-    id: 3,
+    id: "3",
     title: "Wooden Dining Table",
     price: 24999,
     description: "Solid wood dining table for 6 people",
@@ -63,7 +63,7 @@ export const dummyProducts: Product[] = [
     },
   },
   {
-    id: 4,
+    id: "4",
     title: "Study Desk",
     price: 8999,
     description: "Compact study desk with storage drawers",
@@ -83,7 +83,7 @@ export const dummyProducts: Product[] = [
     },
   },
   {
-    id: 5,
+    id: "5",
     title: "Bookshelf",
     price: 12999,
     description: "5-tier bookshelf with adjustable shelves",
@@ -103,7 +103,7 @@ export const dummyProducts: Product[] = [
     },
   },
   {
-    id: 6,
+    id: "6",
     title: "Coffee Table",
     price: 6999,
     description: "Modern glass top coffee table",
@@ -125,7 +125,7 @@ export const dummyProducts: Product[] = [
 ];
 
 // Helper function to get product by ID
-export function getDummyProductById(id: number): Product | undefined {
+export function getDummyProductById(id: string): Product | undefined {
   return dummyProducts.find((product) => product.id === id);
 }
 
