@@ -26,7 +26,7 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: ${{ github.actor }}
+          username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build Docker image
@@ -34,9 +34,9 @@ jobs:
           docker build \
             --build-arg ENVIRONMENT=${{env.ENVIRONMENT }} \
             --build-arg API_PREFIX=${{ env.API_PREFIX }} \
-            -t ghcr.io/${{ github.actor }}/fastapi-app:latest .
+            -t ghcr.io/${{ github.repository_owner }}/fastapi-app:latest .
 
       - name: Push image
         run: |
-          docker push ghcr.io/${{ github.actor }}/fastapi-app:latest
+          docker push ghcr.io/${{ github.repository_owner }}/fastapi-app:latest
 
