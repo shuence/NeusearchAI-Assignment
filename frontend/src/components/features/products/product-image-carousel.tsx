@@ -104,8 +104,8 @@ export function ProductImageCarousel({
         return variantUrlParts && imgParts && variantUrlParts === imgParts;
       });
     }
-    
-    if (imageIndex !== -1) {
+      
+      if (imageIndex !== -1) {
       // Use requestAnimationFrame to ensure carousel is ready
       requestAnimationFrame(() => {
         try {
@@ -114,7 +114,7 @@ export function ProductImageCarousel({
           // Fallback: try with a small delay
           setTimeout(() => {
             try {
-              api.scrollTo(imageIndex);
+        api.scrollTo(imageIndex);
             } catch (e) {
               // Silently fail if still can't scroll
             }
@@ -140,9 +140,14 @@ export function ProductImageCarousel({
     
     // Otherwise, find first variant with this color and show its image
     if (variants) {
-      const colorVariant = variants.find((v) => v.option1 === color);
+      const colorVariant = variants.find((v) => v.option1 === color && v.featured_image?.src);
       if (colorVariant?.featured_image?.src) {
         scrollToImage(String(colorVariant.featured_image.src));
+      } else {
+        // If no variant image, show default/main image
+        if (allImages.length > 0) {
+          scrollToImage(allImages[0]);
+        }
       }
     }
   };
@@ -157,7 +162,30 @@ export function ProductImageCarousel({
       );
       if (matchingVariant?.featured_image?.src) {
         scrollToImage(String(matchingVariant.featured_image.src));
+        return;
       }
+    }
+    
+    // If no color selected, find first variant with this size
+    if (!selectedColor && variants) {
+      const sizeVariant = variants.find((v) => v.option2 === size && v.featured_image?.src);
+      if (sizeVariant?.featured_image?.src) {
+        scrollToImage(String(sizeVariant.featured_image.src));
+      } else {
+        // If no variant image, show default/main image
+    if (allImages.length > 0) {
+          scrollToImage(allImages[0]);
+        }
+      }
+    }
+  };
+  
+  // Reset to default image when both selections are cleared
+  const handleReset = () => {
+    setSelectedColor(null);
+    setSelectedSize(null);
+    if (allImages.length > 0 && api) {
+      scrollToImage(allImages[0]);
     }
   };
 
@@ -205,6 +233,17 @@ export function ProductImageCarousel({
           <div className="space-y-2">
             <p className="text-xs text-muted-foreground">Color</p>
             <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={handleReset}
+                className={`px-4 py-2 rounded-md border text-sm transition-all cursor-pointer ${
+                  !selectedColor
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-muted hover:border-primary/50 hover:bg-primary/5"
+                }`}
+              >
+                All
+              </button>
               {(() => {
                 const uniqueColors = Array.from(
                   new Set(variants.map((v) => v.option1).filter((c): c is string => Boolean(c)))
@@ -228,54 +267,62 @@ export function ProductImageCarousel({
           </div>
 
           {/* Sizes Row */}
-          <div className="space-y-2">
+        <div className="space-y-2">
             <p className="text-xs text-muted-foreground">Size</p>
-            <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedSize(null);
+                  if (!selectedColor && allImages.length > 0 && api) {
+                    scrollToImage(allImages[0]);
+                  }
+                }}
+                className={`px-3 py-1.5 rounded-md border text-sm transition-all cursor-pointer ${
+                  !selectedSize
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-muted hover:border-primary/50 hover:bg-primary/5"
+                }`}
+              >
+                All
+              </button>
               {(() => {
-                // Filter sizes based on selected color if one is selected
+                // Filter sizes based on selected color if one is selected, and only show available ones
                 const availableSizes = selectedColor
                   ? Array.from(
                       new Set(
                         variants
-                          .filter((v) => v.option1 === selectedColor)
+                          .filter((v) => 
+                            v.option1 === selectedColor && 
+                            v.option2 && 
+                            v.available !== false
+                          )
                           .map((v) => v.option2)
                           .filter((s): s is string => Boolean(s))
                       )
                     )
                   : Array.from(
-                      new Set(variants.map((v) => v.option2).filter((s): s is string => Boolean(s)))
+                      new Set(
+                        variants
+                          .filter((v) => v.option2 && v.available !== false)
+                          .map((v) => v.option2)
+                          .filter((s): s is string => Boolean(s))
+                      )
                     );
 
                 return availableSizes.map((size) => {
-                  // Check if this size is available for selected color
-                  const isAvailable = selectedColor
-                    ? variants.some(
-                        (v) =>
-                          v.option1 === selectedColor &&
-                          v.option2 === size &&
-                          v.available !== false
-                      )
-                    : variants.some(
-                        (v) => v.option2 === size && v.available !== false
-                      );
-
                   return (
-                    <button
+                    <span
                       key={size}
-                      type="button"
-                      onClick={() => handleSizeClick(size)}
-                      className={`px-3 py-1.5 rounded-md border text-sm transition-all cursor-pointer ${
+                      className={`px-3 py-1.5 rounded-md border text-sm ${
                         selectedSize === size
                           ? "border-primary bg-primary text-primary-foreground"
-                          : !isAvailable
-                          ? "border-muted bg-muted text-muted-foreground opacity-50 cursor-not-allowed"
-                          : "border-muted hover:border-primary/50 hover:bg-primary/5"
+                          : "border-muted bg-muted text-muted-foreground"
                       }`}
-                      disabled={!isAvailable}
-                      title={size + (!isAvailable ? " (Out of stock)" : "")}
+                      title={size}
                     >
                       {size}
-                    </button>
+                    </span>
                   );
                 });
               })()}

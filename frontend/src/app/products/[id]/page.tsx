@@ -12,6 +12,7 @@ import { ProductDetailSkeleton } from "@/components/features/products/product-de
 import { getProductById, getSimilarProducts } from "@/lib/api/products";
 import { ProductGrid } from "@/components/features/products/product-grid";
 import { CompareButton } from "@/components/features/products/compare-button";
+import { AddToCartButton } from "@/components/features/products/add-to-cart-button";
 import { ROUTES } from "@/lib/constants";
 import type { Product } from "@/types/product";
 import { Loader2 } from "lucide-react";
@@ -203,9 +204,7 @@ export default function ProductDetailPage() {
 
 
             <div className="flex flex-col gap-3">
-              <Button size="lg" className="w-full">
-                Add to Cart
-              </Button>
+              <AddToCartButton product={product} size="lg" className="w-full" />
               <CompareButton product={product} size="lg" className="w-full" />
             </div>
           </div>

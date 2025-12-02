@@ -4,6 +4,9 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from app.config.settings import settings
 from app.utils.logger import get_logger
+from alembic import command
+from alembic.config import Config
+import os
 
 logger = get_logger("database")
 
@@ -32,7 +35,7 @@ def get_db():
 
 
 def init_db():
-    """Initialize database - enable extensions and create tables."""
+    """Initialize database - enable extensions, run migrations, and create tables."""
     try:
         # Test database connection
         with engine.connect() as conn:
@@ -51,9 +54,24 @@ def init_db():
         # Import all models here to ensure they're registered
         from app.models import product  # noqa: F401
         
-        # Create all tables
-        Base.metadata.create_all(bind=engine)
-        logger.info("Database tables created/verified")
+        # Run Alembic migrations to ensure schema is up to date
+        try:
+            # Get the path to alembic.ini (should be in the backend directory)
+            backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+            alembic_cfg = Config(os.path.join(backend_dir, "alembic.ini"))
+            
+            # Override sqlalchemy.url with our settings
+            alembic_cfg.attributes['sqlalchemy.url'] = settings.DATABASE_URL
+            
+            logger.info("Running database migrations...")
+            command.upgrade(alembic_cfg, "head")
+            logger.info("Database migrations completed successfully")
+        except Exception as e:
+            logger.warning(f"Could not run migrations (tables may already exist): {e}")
+            # Fall back to create_all if migrations fail
+            # This handles the case where alembic_version table doesn't exist yet
+            Base.metadata.create_all(bind=engine)
+            logger.info("Database tables created/verified using create_all")
         
     except Exception as e:
         logger.error(f"Failed to initialize database: {e}")

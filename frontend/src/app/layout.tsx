@@ -4,6 +4,8 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { ComparisonProvider } from "@/contexts/comparison-context";
+import { CartProvider } from "@/contexts/cart-context";
+import { OrderProvider } from "@/contexts/order-context";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -60,8 +62,12 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <ComparisonProvider>
-            {children}
-            <Toaster />
+            <CartProvider>
+              <OrderProvider>
+                {children}
+                <Toaster />
+              </OrderProvider>
+            </CartProvider>
           </ComparisonProvider>
         </ThemeProvider>
       </body>

@@ -5,6 +5,7 @@ import Image from "next/image";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { CompareButton } from "./compare-button";
+import { AddToCartButton } from "./add-to-cart-button";
 import type { Product } from "@/types/product";
 import { ROUTES } from "@/lib/constants";
 
@@ -84,23 +85,35 @@ export function ProductCard({ product }: ProductCardProps) {
           {formatPrice(product.price)}
         </p>
       </CardContent>
-      <CardFooter className="shrink-0 flex flex-col gap-2">
-        <Button 
-          className="w-full" 
-          onClick={(e) => {
-            e.stopPropagation();
-            handleCardClick();
-          }}
-          aria-label={`View details for ${title}`}
-        >
-          View Details
-        </Button>
-        <CompareButton 
-          product={product} 
-          variant="outline"
-          size="sm"
-          className="w-full"
-        />
+      <CardFooter className="shrink-0 flex flex-col gap-2 relative z-10">
+        <div onClick={(e) => e.stopPropagation()}>
+          <AddToCartButton 
+            product={product} 
+            size="sm"
+            className="w-full"
+          />
+        </div>
+        <div onClick={(e) => e.stopPropagation()}>
+          <Button 
+            className="w-full" 
+            variant="outline"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleCardClick();
+            }}
+            aria-label={`View details for ${title}`}
+          >
+            View Details
+          </Button>
+        </div>
+        <div onClick={(e) => e.stopPropagation()}>
+          <CompareButton 
+            product={product} 
+            variant="outline"
+            size="sm"
+            className="w-full"
+          />
+        </div>
       </CardFooter>
     </Card>
   );

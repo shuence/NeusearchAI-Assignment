@@ -3,16 +3,22 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useComparison } from "@/contexts/comparison-context";
+import { useCart } from "@/contexts/cart-context";
+import { useOrders } from "@/contexts/order-context";
 import { ROUTES } from "@/lib/constants";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Scale } from "lucide-react";
+import { Scale, ShoppingCart, History } from "lucide-react";
 
 export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { products } = useComparison();
+  const { getTotalItems } = useCart();
+  const { getTotalOrders } = useOrders();
   const comparisonCount = products.length;
+  const cartCount = getTotalItems();
+  const orderCount = getTotalOrders();
 
   return (
     <header className="border-b sticky top-0 bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60 z-50">
@@ -51,6 +57,34 @@ export function Header() {
                   className="h-5 w-5 p-0 flex items-center justify-center text-xs absolute -top-2 -right-2"
                 >
                   {comparisonCount}
+                </Badge>
+              )}
+            </Link>
+            <Link
+              href={ROUTES.CART}
+              className="text-sm font-medium hover:text-primary transition-colors flex items-center gap-2 relative"
+            >
+              <ShoppingCart className="h-4 w-4" />
+              Cart
+              {cartCount > 0 && (
+                <Badge 
+                  variant="default" 
+                  className="h-5 w-5 p-0 flex items-center justify-center text-xs absolute -top-2 -right-2"
+                >
+                  {cartCount}
+                </Badge>
+              )}
+            </Link>
+            <Link
+              href={ROUTES.ORDER_HISTORY}
+              className="text-sm font-medium hover:text-primary transition-colors flex items-center gap-2"
+              title="Order History"
+            >
+              <History className="h-4 w-4" />
+              Orders
+              {orderCount > 0 && (
+                <Badge variant="secondary" className="ml-1">
+                  {orderCount}
                 </Badge>
               )}
             </Link>
@@ -116,6 +150,35 @@ export function Header() {
                   className="h-5 w-5 p-0 flex items-center justify-center text-xs"
                 >
                   {comparisonCount}
+                </Badge>
+              )}
+            </Link>
+            <Link
+              href={ROUTES.CART}
+              className="text-sm font-medium hover:text-primary transition-colors py-2 flex items-center gap-2"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              <ShoppingCart className="h-4 w-4" />
+              Cart
+              {cartCount > 0 && (
+                <Badge 
+                  variant="default" 
+                  className="h-5 w-5 p-0 flex items-center justify-center text-xs"
+                >
+                  {cartCount}
+                </Badge>
+              )}
+            </Link>
+            <Link
+              href={ROUTES.ORDER_HISTORY}
+              className="text-sm font-medium hover:text-primary transition-colors py-2 flex items-center gap-2"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              <History className="h-4 w-4" />
+              Orders
+              {orderCount > 0 && (
+                <Badge variant="secondary" className="ml-1">
+                  {orderCount}
                 </Badge>
               )}
             </Link>

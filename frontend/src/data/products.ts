@@ -8,14 +8,14 @@ export const dummyProducts: Product[] = [
     description: "Ergonomic office chair with lumbar support",
     image: "https://images.unsplash.com/photo-1586953208448-b95a79798f07?w=400&h=300&fit=crop",
     category: "Furniture",
-    features: [
+    ai_features: [
       "Ergonomic design with lumbar support",
       "Adjustable height and armrests",
       "360-degree swivel",
       "Premium padding and materials",
       "5-year warranty",
     ],
-    attributes: {
+    features: {
       Material: "Mesh & Foam",
       Weight: "15 kg",
       Dimensions: "60 x 60 x 120 cm",
@@ -29,13 +29,13 @@ export const dummyProducts: Product[] = [
     description: "3-seater sofa with premium fabric upholstery",
     image: "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=400&h=300&fit=crop",
     category: "Furniture",
-    features: [
+    ai_features: [
       "Premium fabric upholstery",
       "Comfortable seating for 3",
       "Modern design",
       "Durable construction",
     ],
-    attributes: {
+    features: {
       Material: "Fabric",
       Seating: "3-seater",
       Dimensions: "220 x 90 x 85 cm",
@@ -49,13 +49,13 @@ export const dummyProducts: Product[] = [
     description: "Solid wood dining table for 6 people",
     image: "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=400&h=300&fit=crop",
     category: "Furniture",
-    features: [
+    ai_features: [
       "Solid wood construction",
       "Seats 6 people comfortably",
       "Classic design",
       "Easy to maintain",
     ],
-    attributes: {
+    features: {
       Material: "Solid Wood",
       Seating: "6 people",
       Dimensions: "180 x 90 x 75 cm",
@@ -69,13 +69,13 @@ export const dummyProducts: Product[] = [
     description: "Compact study desk with storage drawers",
     image: "https://images.unsplash.com/photo-1586953208448-b95a79798f07?w=400&h=300&fit=crop",
     category: "Furniture",
-    features: [
+    ai_features: [
       "Compact design",
       "Storage drawers",
       "Perfect for small spaces",
       "Durable construction",
     ],
-    attributes: {
+    features: {
       Material: "Engineered Wood",
       Storage: "2 drawers",
       Dimensions: "120 x 60 x 75 cm",
@@ -89,13 +89,13 @@ export const dummyProducts: Product[] = [
     description: "5-tier bookshelf with adjustable shelves",
     image: "https://images.unsplash.com/photo-1586953208448-b95a79798f07?w=400&h=300&fit=crop",
     category: "Furniture",
-    features: [
+    ai_features: [
       "5 adjustable shelves",
       "Spacious storage",
       "Sturdy construction",
       "Modern design",
     ],
-    attributes: {
+    features: {
       Material: "Engineered Wood",
       Shelves: "5 tiers",
       Dimensions: "90 x 30 x 180 cm",
@@ -109,13 +109,13 @@ export const dummyProducts: Product[] = [
     description: "Modern glass top coffee table",
     image: "https://images.unsplash.com/photo-1586953208448-b95a79798f07?w=400&h=300&fit=crop",
     category: "Furniture",
-    features: [
+    ai_features: [
       "Glass top surface",
       "Modern design",
       "Sturdy base",
       "Easy to clean",
     ],
-    attributes: {
+    features: {
       Material: "Glass & Metal",
       Top: "Tempered Glass",
       Dimensions: "120 x 60 x 45 cm",
