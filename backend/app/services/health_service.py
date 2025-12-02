@@ -4,6 +4,8 @@ import sys
 import platform
 import os
 import time
+import re
+import subprocess
 import psutil
 from datetime import datetime
 from sqlalchemy import text
@@ -27,6 +29,110 @@ class HealthService:
     def __init__(self):
         """Initialize health service with start time tracking."""
         self._start_time = time.time()
+        self._last_cpu_check = None
+    
+    def _get_cpu_frequency(self) -> tuple[Optional[float], Optional[float]]:
+        """Get CPU frequency using multiple methods for cross-platform support."""
+        current_freq = None
+        max_freq = None
+        
+        # Method 1: Try psutil (works on Linux, sometimes on macOS)
+        try:
+            cpu_freq = psutil.cpu_freq()
+            if cpu_freq:
+                if hasattr(cpu_freq, 'current') and cpu_freq.current:
+                    current_freq = round(cpu_freq.current, 2)
+                if hasattr(cpu_freq, 'max') and cpu_freq.max:
+                    max_freq = round(cpu_freq.max, 2)
+                if current_freq or max_freq:
+                    return current_freq, max_freq
+        except (OSError, AttributeError, RuntimeError):
+            pass
+        
+        # Method 2: macOS - try sysctl
+        if platform.system() == "Darwin":
+            # Try various sysctl keys for CPU frequency
+            sysctl_keys = [
+                "hw.cpufrequency",
+                "hw.cpufrequency_max",
+                "hw.cpufrequency_min",
+            ]
+            
+            for key in sysctl_keys:
+                try:
+                    result = subprocess.run(
+                        ["sysctl", "-n", key],
+                        capture_output=True,
+                        text=True,
+                        timeout=1
+                    )
+                    if result.returncode == 0 and result.stdout.strip():
+                        freq_hz = int(result.stdout.strip())
+                        if freq_hz > 0:
+                            freq_mhz = round(freq_hz / 1_000_000, 2)  # Convert Hz to MHz
+                            if current_freq is None:
+                                current_freq = freq_mhz
+                            if max_freq is None or freq_mhz > max_freq:
+                                max_freq = freq_mhz
+                except (subprocess.TimeoutExpired, ValueError, FileNotFoundError):
+                    continue
+            
+            # If we got any frequency, return it
+            if current_freq or max_freq:
+                if current_freq is None:
+                    current_freq = max_freq
+                if max_freq is None:
+                    max_freq = current_freq
+                return current_freq, max_freq
+            
+            # Try to get from system_profiler (slower but more reliable on some Macs)
+            try:
+                result = subprocess.run(
+                    ["system_profiler", "SPHardwareDataType"],
+                    capture_output=True,
+                    text=True,
+                    timeout=2
+                )
+                if result.returncode == 0:
+                    # Look for processor speed in output (e.g., "2.4 GHz")
+                    match = re.search(r'Processor Speed:\s*(\d+\.?\d*)\s*GHz', result.stdout, re.IGNORECASE)
+                    if match:
+                        freq_ghz = float(match.group(1))
+                        freq_mhz = round(freq_ghz * 1000, 2)
+                        return freq_mhz, freq_mhz
+            except (subprocess.TimeoutExpired, FileNotFoundError):
+                pass
+        
+        # Method 3: Linux - try /proc/cpuinfo
+        elif platform.system() == "Linux":
+            try:
+                frequencies = []
+                with open("/proc/cpuinfo", "r") as f:
+                    for line in f:
+                        if "cpu MHz" in line.lower():
+                            try:
+                                freq_mhz = float(line.split(":")[1].strip())
+                                if freq_mhz > 0:
+                                    frequencies.append(freq_mhz)
+                            except (ValueError, IndexError):
+                                continue
+                        elif "model name" in line.lower() and "ghz" in line.lower() and max_freq is None:
+                            # Try to extract frequency from model name (e.g., "2.4 GHz")
+                            match = re.search(r'(\d+\.?\d*)\s*ghz', line.lower())
+                            if match:
+                                freq_ghz = float(match.group(1))
+                                max_freq = round(freq_ghz * 1000, 2)  # Convert GHz to MHz
+                
+                if frequencies:
+                    # Use average of all cores for current frequency, max for max frequency
+                    current_freq = round(sum(frequencies) / len(frequencies), 2)
+                    if max_freq is None:
+                        max_freq = round(max(frequencies), 2)
+                    return current_freq, max_freq
+            except (FileNotFoundError, ValueError, IOError):
+                pass
+        
+        return current_freq, max_freq
     
     def get_health_response(self) -> HealthResponse:
         """Get complete health check response with all system information."""
@@ -36,16 +142,41 @@ class HealthService:
         cpu_frequency_mhz = None
         cpu_frequency_max_mhz = None
         try:
-            cpu_percent = psutil.cpu_percent(interval=0.1)
+            # Get CPU count first
             cpu_count = psutil.cpu_count()
-            try:
-                cpu_freq = psutil.cpu_freq()
-                if cpu_freq:
-                    cpu_frequency_mhz = cpu_freq.current
-                    cpu_frequency_max_mhz = cpu_freq.max
-            except (OSError, AttributeError):
-                pass
-        except Exception:
+            
+            # For CPU percentage, psutil needs a baseline measurement
+            # Use interval=None if we've called before, otherwise use a small interval
+            if self._last_cpu_check is None:
+                # First call - establish baseline with a small interval
+                # This is acceptable for health checks (0.2s delay)
+                psutil.cpu_percent(interval=None)  # Establish baseline
+                time.sleep(0.1)  # Small delay for measurement
+                cpu_percent = psutil.cpu_percent(interval=None)
+                self._last_cpu_check = time.time()
+            else:
+                # Subsequent calls use interval=None which measures since last call
+                # This is faster and more accurate for frequent polling
+                elapsed = time.time() - self._last_cpu_check
+                if elapsed > 0.1:
+                    cpu_percent = psutil.cpu_percent(interval=None)
+                    self._last_cpu_check = time.time()
+                else:
+                    # If called too soon, use a small interval
+                    cpu_percent = psutil.cpu_percent(interval=0.2)
+                    self._last_cpu_check = time.time()
+            
+            # Ensure we have a valid CPU percentage (not None)
+            if cpu_percent is None:
+                # Fallback: use a small interval measurement
+                cpu_percent = psutil.cpu_percent(interval=0.2)
+                self._last_cpu_check = time.time()
+            
+            # Get CPU frequency using cross-platform methods
+            cpu_frequency_mhz, cpu_frequency_max_mhz = self._get_cpu_frequency()
+            
+        except Exception as e:
+            logger.debug(f"Error getting CPU information: {e}")
             pass
         
         # Memory information

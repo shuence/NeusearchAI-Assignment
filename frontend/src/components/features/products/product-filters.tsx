@@ -169,7 +169,7 @@ export function ProductFilters({
   };
 
   return (
-    <div className="space-y-4 mb-8">
+    <div className="space-y-3 lg:space-y-3 mb-4 lg:mb-6">
       {/* Search Bar */}
       <div className="relative">
         <Search className={`absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 transition-colors ${

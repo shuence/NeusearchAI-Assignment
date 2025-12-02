@@ -152,6 +152,10 @@ export default function StatusPage() {
 
   const formatNumber = (num?: number, decimals = 2): string => {
     if (num === undefined || num === null) return "N/A";
+    // For whole numbers, don't show decimals
+    if (decimals > 0 && num % 1 === 0) {
+      return num.toFixed(0);
+    }
     return num.toFixed(decimals);
   };
 
@@ -396,7 +400,7 @@ export default function StatusPage() {
                       </div>
                       <div className="flex justify-between text-xs text-muted-foreground">
                         <span>Cores: {health?.cpu_count || "N/A"}</span>
-                        <span>{health?.cpu_frequency_mhz ? `${formatNumber(health.cpu_frequency_mhz)} MHz` : "N/A"}</span>
+                        <span>{health?.cpu_frequency_mhz ? `${formatNumber(health.cpu_frequency_mhz, 0)} MHz` : "N/A"}</span>
                       </div>
                     </div>
                   </CardContent>

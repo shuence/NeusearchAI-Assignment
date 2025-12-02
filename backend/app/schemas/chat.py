@@ -84,6 +84,7 @@ class ChatResponse(BaseModel):
     products: List[DBProduct]
     needs_clarification: bool
     recommendations: Optional[List[ProductRecommendation]] = None
+    suggested_follow_ups: Optional[List[str]] = None
 
 
 class CompareRequest(BaseModel):

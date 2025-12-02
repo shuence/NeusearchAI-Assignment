@@ -60,10 +60,10 @@ export default function Home() {
     <div className="min-h-screen bg-background flex flex-col">
       <Header />
 
-      <main className="container mx-auto px-4 py-8 flex-1">
-        <div className="mb-8">
-          <h2 className="text-3xl font-bold mb-2">All Products</h2>
-          <p className="text-muted-foreground">
+      <main className="container mx-auto px-4 py-4 lg:py-6 flex-1 max-w-7xl lg:max-w-6xl">
+        <div className="mb-4 lg:mb-6">
+          <h2 className="text-2xl lg:text-2xl font-bold mb-1 lg:mb-2">All Products</h2>
+          <p className="text-sm lg:text-base text-muted-foreground">
             Browse our collection of products
           </p>
         </div>

@@ -27,12 +27,29 @@ Neusearch/
     │   │   │       └── page.tsx   # Product detail page
     │   │   ├── chat/
     │   │   │   └── page.tsx       # Chat interface
+    │   │   ├── compare/
+    │   │   │   └── page.tsx       # Product comparison page
+    │   │   ├── cart/
+    │   │   │   └── page.tsx       # Shopping cart page
+    │   │   ├── checkout/
+    │   │   │   └── page.tsx       # Checkout page
+    │   │   ├── orders/
+    │   │   │   ├── page.tsx       # Order history page
+    │   │   │   └── [id]/
+    │   │   │       └── page.tsx   # Order detail page
+    │   │   ├── order-success/
+    │   │   │   └── page.tsx       # Order confirmation page
     │   │   └── not-found.tsx      # 404 page
     │   ├── components/
     │   │   ├── ui/                # shadcn/ui components
     │   │   ├── layout/            # Layout components (header, footer)
     │   │   └── features/          # Feature-specific components
-    │   │       └── products/      # Product-related components
+    │   │       ├── products/      # Product-related components
+    │   │       └── chat/          # Chat components
+    │   ├── contexts/              # React contexts
+    │   │   ├── cart-context.tsx   # Shopping cart state
+    │   │   ├── comparison-context.tsx  # Product comparison state
+    │   │   └── order-context.tsx   # Order management state
     │   ├── lib/
     │   │   ├── utils.ts           # Utility functions
     │   │   ├── constants.ts       # App constants
@@ -90,14 +107,14 @@ pip install -r requirements.txt
 5. Set up environment variables:
 
 ```bash
-# Copy the example env file
-cp .env.example .env
+# Copy the example env file to backend/.env
+cp .env.example backend/.env
 
-# Or create .env manually with database configuration
-# Edit .env with your configuration, especially DATABASE_URL
+# Or create backend/.env manually with database configuration
+# Edit backend/.env with your configuration, especially DATABASE_URL
 ```
 
-**Important**: Make sure to set the `DATABASE_URL` in your `.env` file:
+**Important**: Make sure to set the `DATABASE_URL` in your `backend/.env` file:
 
 - For local development: `postgresql://neusearch:neusearch@localhost:5432/neusearch`
 - For Docker Compose: `postgresql://neusearch:neusearch@postgres:5432/neusearch`
@@ -119,8 +136,11 @@ pnpm install
 3. Set up environment variables:
 
 ```bash
-cp .env.example .env.local
-# Edit .env.local with your configuration
+# Copy the example env file to frontend/.env.local
+cp .env.example frontend/.env.local
+
+# Or create frontend/.env.local manually
+# Edit frontend/.env.local with your configuration
 ```
 
 ## Local Development with Docker
@@ -130,26 +150,19 @@ The easiest way to set up the development environment is using Docker Compose. T
 ### Prerequisites
 
 - Docker and Docker Compose installed
-- `.env` file in the root directory (see Environment Variables section)
+- `.env` file in the root directory (for Docker Compose)
+- `backend/.env` file with required configuration (for local development)
 
 ### Quick Start
 
-1. **Create a `.env` file** in the root directory (if you don't have one):
+1. **Create a `.env` file in the root directory** (for Docker Compose):
 
 ```bash
-# Backend Configuration
-ENVIRONMENT=development
-DATABASE_URL=postgresql://neusearch:neusearch@postgres:5432/neusearch
-REDIS_HOST=redis
-REDIS_PORT=6379
+# Copy the example env file from root
+cp .env.example .env
 
-# Gemini API (required for RAG features)
-GEMINI_API_KEY=your_gemini_api_key_here
 
-# Optional: Other backend settings
-SCRAPE_INTERVAL_HOURS=6
-SYNC_ON_STARTUP=true
-```
+**Note**: Docker Compose reads the `.env` file from the root directory. Make sure to create `.env` in the project root (same directory as `docker-compose.local.yml`).
 
 2. **Start all services**:
 
@@ -238,7 +251,7 @@ docker-compose -f docker-compose.local.yml exec redis redis-cli
 
 **Services not starting**: Check logs with `docker-compose -f docker-compose.local.yml logs` to see error messages.
 
-**Database connection issues**: Ensure the `DATABASE_URL` in your `.env` uses `postgres` as the hostname (Docker service name), not `localhost`.
+**Database connection issues**: Ensure the `DATABASE_URL` in your root `.env` file (for Docker) uses `postgres` as the hostname (Docker service name), not `localhost`.
 
 **Frontend can't reach backend**: The frontend uses `http://localhost:8000` for client-side requests and `http://backend:8000` for server-side requests (SSR).
 
@@ -308,22 +321,42 @@ import { Button } from "@/components/ui/button";
 
 ### Available Components
 
-- **Button** - Already included as an example component
+The following shadcn/ui components are already included:
+
+- **Button** - Interactive button component
+- **Card** - Container component for content sections
+- **Badge** - Status and label badges
+- **Input** - Form input fields
+- **Label** - Form labels
+- **Textarea** - Multi-line text input
+- **Skeleton** - Loading placeholders
+- **Carousel** - Image/product carousel
+- **Slider** - Range slider component
+- **Toaster** - Toast notification system
 
 See the [shadcn/ui documentation](https://ui.shadcn.com/docs/components) for the full list of available components.
 
 ## Features
 
-- RAG (Retrieval-Augmented Generation) implementation
-- Web scraping capabilities
-- RESTful API
-- Next.js frontend with modern UI
-- shadcn/ui component library
-- Docker containerization
-- Redis caching
-- Automated product synchronization
-- Vector embeddings with pgvector
-- LLM-powered product recommendations
+### Core Features
+
+- **RAG (Retrieval-Augmented Generation)** - Intelligent product search and recommendations using semantic search and LLM
+- **AI-Powered Chat** - Conversational interface for product discovery with context-aware recommendations
+- **Product Comparison** - Compare multiple products side-by-side with AI-generated insights
+- **Shopping Cart** - Add products to cart and manage items before checkout
+- **Checkout & Orders** - Complete checkout flow with order management and history
+- **Floating Chat Widget** - Accessible chat interface available across all pages
+
+### Technical Features
+
+- **Web Scraping** - Automated product data synchronization from external sources
+- **RESTful API** - FastAPI backend with comprehensive endpoints
+- **Vector Search** - Semantic product search using pgvector and embeddings
+- **Redis Caching** - High-performance caching for product data
+- **Next.js Frontend** - Modern React application with server-side rendering
+- **shadcn/ui Components** - Beautiful, accessible UI component library
+- **Docker Containerization** - Easy deployment and development setup
+- **Automated Synchronization** - Scheduled product updates and embedding generation
 
 ## Documentation
 
@@ -655,6 +688,52 @@ API documentation is available at `/api/docs` when running the backend (Scalar A
 - `GET /api/products/hunnit/{id}` - Get product by ID
 - `POST /api/products/hunnit/scrape` - Trigger product scraping
 - `POST /api/chat` - Chat endpoint for product recommendations
+- `POST /api/chat/compare` - Compare multiple products with AI insights
+
+## User Features
+
+### Shopping Cart
+
+- Add products to cart from product pages or search results
+- View cart contents with item quantities and totals
+- Update quantities or remove items
+- Persistent cart storage using browser localStorage
+- Cart badge indicator in header showing item count
+
+### Checkout Flow
+
+- Complete checkout form with customer and shipping information
+- Support for multiple payment methods (Card, Cash on Delivery)
+- Form validation with error messages
+- Order summary with itemized breakdown
+- Tax and shipping cost calculation
+- Order confirmation page with order details
+
+### Order Management
+
+- View order history with all past orders
+- Order detail pages showing full order information
+- Order status tracking (pending, processing, shipped, delivered)
+- Order number generation and tracking
+- Customer and shipping information display
+
+### Product Comparison
+
+- Compare up to 4 products side-by-side
+- AI-powered comparison insights highlighting key differences
+- Structured comparison table with categorized features
+- Similar products recommendations
+- Send comparison to chat for further discussion
+- Add/remove products from comparison easily
+
+### Chat Interface
+
+- Conversational AI for product discovery
+- Context-aware recommendations based on conversation history
+- Product cards displayed within chat messages
+- Suggested follow-up questions
+- Floating chat widget available on all pages
+- Full-page chat interface for detailed conversations
 
 ## Future Improvements
 
@@ -700,12 +779,18 @@ If given more time, here are the improvements I would prioritize:
    - Personalized recommendations
    - Search history
    - Favorite products
+   - User authentication
 
 4. **Performance Optimization**
    - Embedding caching
    - Query result caching
    - Database query optimization
    - CDN for static assets
+
+5. **Payment Integration**
+   - Real payment gateway integration (Stripe, Razorpay)
+   - Payment status tracking
+   - Refund processing
 
 ### Long-term (2-3 months)
 
@@ -716,10 +801,10 @@ If given more time, here are the improvements I would prioritize:
    - A/B testing framework
 
 2. **Advanced Features**
-   - Product comparison
-   - Price tracking
+   - Price tracking and alerts
    - Stock alerts
    - Wishlist functionality
+   - Product reviews and ratings
 
 3. **Scalability Improvements**
    - Migrate to dedicated vector DB (Pinecone/Weaviate) if needed

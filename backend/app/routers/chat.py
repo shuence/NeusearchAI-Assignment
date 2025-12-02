@@ -107,11 +107,29 @@ async def chat(
                 logger.warning(f"Failed to create recommendations: {e}")
                 # Continue without recommendations
         
+        # Generate AI-based follow-up suggestions
+        suggested_follow_ups = None
+        try:
+            assistant_response = result.get("response", "")
+            suggested_follow_ups = rag_service.generate_follow_ups(
+                user_query=chat_request.message,
+                assistant_response=assistant_response,
+                products=products,
+                conversation_history=chat_request.conversation_history
+            )
+            # Only include if we got valid follow-ups
+            if not suggested_follow_ups or len(suggested_follow_ups) == 0:
+                suggested_follow_ups = None
+        except Exception as e:
+            logger.warning(f"Failed to generate follow-ups: {e}")
+            # Continue without follow-ups - not critical
+        
         return ChatResponse(
             response=result.get("response", "I'm sorry, I couldn't process your request."),
             products=db_products,
             needs_clarification=result.get("needs_clarification", False),
-            recommendations=recommendations
+            recommendations=recommendations,
+            suggested_follow_ups=suggested_follow_ups
         )
         
     except HTTPException:

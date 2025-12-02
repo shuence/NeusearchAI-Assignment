@@ -53,12 +53,23 @@ export function ProductComparison() {
       return;
     }
 
+    // Generate suggested follow-up questions based on the comparison
+    const suggestedFollowUps = [
+      `Tell me more about ${products[0]?.title || "the first product"}`,
+      `What are the best alternatives to these products?`,
+      `Show me similar products to ${products[0]?.title || "these"}`,
+      `What are the key differences between these products?`,
+      `Which product would you recommend for me?`,
+    ];
+
     // Store the comparison message in localStorage to be picked up by chat page
     const comparisonMessage = {
       role: "assistant" as const,
       content: `Product Comparison:\n\n${aiInsight}\n\nProducts compared: ${products.map((p) => p.title).join(", ")}`,
       timestamp: new Date().toISOString(),
       products: products,
+      aiInsight: aiInsight, // Store the AI insight for table rendering
+      suggestedFollowUps: suggestedFollowUps, // Store suggested follow-ups
     };
 
     // Store in a way that chat page can access
@@ -347,7 +358,7 @@ export function ProductComparison() {
                       )}
 
                       <CardHeader className="shrink-0">
-                        <div className="w-full overflow-hidden rounded-lg bg-muted mb-4 relative h-[200px] flex items-center justify-center">
+                        <div className="w-full overflow-hidden rounded-lg bg-[#EEECEA] mb-4 relative h-[200px] flex items-center justify-center">
                           <Image
                             src={imageSrc}
                             alt={product.title}
@@ -792,7 +803,7 @@ export function ProductComparison() {
                       >
                         <X className="h-4 w-4" />
                       </Button>
-                          <div className="w-full h-64 bg-muted rounded-lg mb-4 relative overflow-hidden flex items-center justify-center">
+                          <div className="w-full h-64 bg-[#EEECEA] rounded-lg mb-4 relative overflow-hidden flex items-center justify-center">
                         <Image
                           src={imageSrc}
                           alt={product.title}
@@ -901,7 +912,7 @@ export function ProductComparison() {
                         }}
                       >
                         <CardHeader className="p-3">
-                          <div className="w-full h-32 bg-muted rounded-lg mb-2 relative overflow-hidden flex items-center justify-center">
+                          <div className="w-full h-32 bg-[#EEECEA] rounded-lg mb-2 relative overflow-hidden flex items-center justify-center">
                             <Image
                               src={imageSrc}
                               alt={product.title}
