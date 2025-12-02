@@ -109,6 +109,21 @@ class Settings(BaseSettings):
     GEMINI_EMBEDDING_MODEL: str = "gemini-embedding-001"
     GEMINI_EMBEDDING_DIMENSION: int = 1536  # 768, 1536, or 3072
     
+    # Email Notification Settings (Resend SMTP) - OPTIONAL
+    # Email notifications are completely optional. The app will work fine without them.
+    # To enable: Set ENABLE_EMAIL_NOTIFICATIONS=true and provide RESEND_API_KEY in .env
+    # All email settings should be configured in .env file
+    RESEND_API_KEY: Optional[str] = None  # Used as SMTP password - set in .env
+    SMTP_HOST: str = "smtp.resend.com"  # Can be overridden in .env
+    SMTP_PORT: int = 587  # Use 587 for STARTTLS, or 465 for SSL - can be overridden in .env
+    SMTP_USERNAME: str = "resend"  # Resend SMTP username is always "resend"
+    EMAIL_FROM: Optional[str] = None  # Set in .env (e.g., neusearchai@shuence.com)
+    EMAIL_TO: Optional[str] = None  # Set in .env (e.g., shubhampitekar2323@gmail.com)
+    ENABLE_EMAIL_NOTIFICATIONS: bool = False  # Set to True in .env to enable email notifications
+    
+    # Status Page Access
+    STATUS_ACCESS_CODE: Optional[str] = None # Access code for /status page - set in .env
+    
     model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive=True,

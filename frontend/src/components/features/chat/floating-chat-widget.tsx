@@ -20,15 +20,15 @@ const SUGGESTIONS = [
 
 const STORAGE_KEY = "neusearch_chat_messages";
 
-const DEFAULT_MESSAGE: ChatMessage = {
+const getDefaultMessage = (): ChatMessage => ({
   role: "assistant",
   content: "Hello! I'm your product recommendation assistant. How can I help you find the perfect products today?",
   timestamp: new Date().toISOString(),
-};
+});
 
 // Load messages from localStorage
 const loadMessagesFromStorage = (): ChatMessage[] => {
-  if (typeof window === "undefined") return [DEFAULT_MESSAGE];
+  if (typeof window === "undefined") return [];
   
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -41,7 +41,7 @@ const loadMessagesFromStorage = (): ChatMessage[] => {
   } catch (error) {
     console.error("Error loading messages from localStorage:", error);
   }
-  return [DEFAULT_MESSAGE];
+  return [getDefaultMessage()];
 };
 
 // Save messages to localStorage
@@ -57,11 +57,23 @@ const saveMessagesToStorage = (messages: ChatMessage[]) => {
 
 export function FloatingChatWidget() {
   const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState<ChatMessage[]>(loadMessagesFromStorage);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [isMounted, setIsMounted] = useState(false);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Load messages from localStorage only on client side after mount
+  useEffect(() => {
+    setIsMounted(true);
+    const loadedMessages = loadMessagesFromStorage();
+    if (loadedMessages.length === 0) {
+      setMessages([getDefaultMessage()]);
+    } else {
+      setMessages(loadedMessages);
+    }
+  }, []);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -69,8 +81,10 @@ export function FloatingChatWidget() {
 
   // Save messages to localStorage whenever they change
   useEffect(() => {
-    saveMessagesToStorage(messages);
-  }, [messages]);
+    if (isMounted) {
+      saveMessagesToStorage(messages);
+    }
+  }, [messages, isMounted]);
 
   useEffect(() => {
     if (isOpen) {
@@ -241,7 +255,7 @@ export function FloatingChatWidget() {
                         <p className="whitespace-pre-wrap text-sm leading-relaxed">
                           {message.content}
                         </p>
-                        {message.timestamp && (
+                        {message.timestamp && isMounted && (
                           <p
                             className={`text-xs mt-1 ${
                               message.role === "user"

@@ -1,8 +1,10 @@
 """Validation middleware for request validation and sanitization."""
+import asyncio
 from fastapi import Request, HTTPException
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from app.utils.logger import get_logger
+from app.services.email_service import send_request_error_notification
 
 logger = get_logger("validation_middleware")
 
@@ -43,6 +45,14 @@ class RequestValidationMiddleware(BaseHTTPMiddleware):
         except Exception as e:
             # Log unexpected errors
             logger.error(f"Unexpected error in middleware: {e}", exc_info=True)
+            # Send email notification in background
+            asyncio.create_task(send_request_error_notification(
+                error=e,
+                path=request.url.path,
+                method=request.method,
+                request_id=getattr(request.state, "request_id", None),
+                client_host=request.client.host if request.client else None
+            ))
             raise
 
 
@@ -62,6 +72,15 @@ class ErrorHandlingMiddleware(BaseHTTPMiddleware):
                 exc_info=True,
                 extra={"path": request.url.path, "method": request.method}
             )
+            
+            # Send email notification in background
+            asyncio.create_task(send_request_error_notification(
+                error=e,
+                path=request.url.path,
+                method=request.method,
+                request_id=getattr(request.state, "request_id", None),
+                client_host=request.client.host if request.client else None
+            ))
             
             return JSONResponse(
                 status_code=500,

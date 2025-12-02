@@ -54,17 +54,23 @@ export default function OrderHistoryPage() {
 
   if (orders.length === 0) {
     return (
-      <div className="min-h-screen bg-background flex flex-col">
+      <div className="h-screen bg-background flex flex-col">
         <Header />
         <main className="container mx-auto px-4 py-8 flex-1 flex flex-col items-center justify-center">
-          <div className="text-center space-y-4 max-w-md">
-            <History className="h-16 w-16 mx-auto text-muted-foreground" />
-            <h1 className="text-3xl font-bold">No Orders Yet</h1>
-            <p className="text-muted-foreground">
-              You haven't placed any orders yet. Start shopping to see your order history here.
-            </p>
+          <div className="text-center space-y-6 max-w-md">
+            <div className="flex justify-center">
+              <div className="rounded-full bg-muted p-6">
+                <History className="h-16 w-16 text-muted-foreground" />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <h1 className="text-3xl font-bold">No Orders Yet</h1>
+              <p className="text-muted-foreground text-lg">
+                You haven't placed any orders yet. Start shopping to see your order history here.
+              </p>
+            </div>
             <Link href={ROUTES.HOME}>
-              <Button size="lg" className="mt-4">
+              <Button size="lg" className="mt-6">
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 Start Shopping
               </Button>
@@ -127,10 +133,15 @@ export default function OrderHistoryPage() {
         <div className="space-y-4">
           {filteredOrders.length === 0 ? (
             <Card>
-              <CardContent className="py-12 text-center">
-                <Package className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+              <CardContent className="py-16 text-center">
+                <div className="flex justify-center mb-4">
+                  <div className="rounded-full bg-muted p-4">
+                    <Package className="h-12 w-12 text-muted-foreground" />
+                  </div>
+                </div>
+                <h3 className="text-xl font-semibold mb-2">No orders found</h3>
                 <p className="text-muted-foreground">
-                  No orders found with status: <strong>{statusFilter}</strong>
+                  No orders found with status: <strong className="capitalize">{statusFilter}</strong>
                 </p>
               </CardContent>
             </Card>

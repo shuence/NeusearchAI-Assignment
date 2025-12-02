@@ -46,7 +46,7 @@ export function ProductCarousel({ products, cardWidth }: ProductCarouselProps) {
             className="shrink-0 snap-start flex w-[240px] sm:w-[280px]"
             style={responsiveCardWidth !== 280 ? { width: `${responsiveCardWidth}px` } : undefined}
           >
-            <ProductCard product={product} />
+            <ProductCard product={product} showCompare={false} />
           </div>
         ))}
       </div>

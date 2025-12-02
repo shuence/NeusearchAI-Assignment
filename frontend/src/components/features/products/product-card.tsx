@@ -11,9 +11,10 @@ import { ROUTES } from "@/lib/constants";
 
 interface ProductCardProps {
   product: Product;
+  showCompare?: boolean;
 }
 
-export function ProductCard({ product }: ProductCardProps) {
+export function ProductCard({ product, showCompare = true }: ProductCardProps) {
   const router = useRouter();
 
   const formatPrice = (price: number | null | undefined): string => {
@@ -55,7 +56,7 @@ export function ProductCard({ product }: ProductCardProps) {
       onClick={handleCardClick}
     >
       <CardHeader className="shrink-0 pb-3">
-        <div className="w-full overflow-hidden rounded-lg bg-[#EEECEB] mb-3 relative h-[220px] flex items-center justify-center group">
+        <div className="w-full overflow-hidden rounded-lg bg-[#EEECEA] mb-3 relative h-[220px] flex items-center justify-center group">
           <Image
             src={imageSrc}
             alt={title}
@@ -88,8 +89,8 @@ export function ProductCard({ product }: ProductCardProps) {
         <div className="flex flex-col gap-1 shrink-0">
           <div className="flex items-center gap-2 flex-wrap">
             <p className="text-2xl font-bold">
-              {formatPrice(product.price)}
-            </p>
+          {formatPrice(product.price)}
+        </p>
             {product.compare_at_price && 
              product.compare_at_price > (product.price || 0) && (
               <p className="text-sm text-muted-foreground line-through">
@@ -109,18 +110,20 @@ export function ProductCard({ product }: ProductCardProps) {
       </CardContent>
       <CardFooter className="shrink-0 flex flex-col gap-2.5 relative z-10 pt-4 border-t">
         {/* Add to Cart and Compare in one row */}
-        <div className="flex gap-2 w-full" onClick={(e) => e.stopPropagation()}>
+        <div className={`flex gap-2 w-full ${showCompare ? '' : 'flex-col'}`} onClick={(e) => e.stopPropagation()}>
           <AddToCartButton 
             product={product} 
             size="default"
-            className="flex-1 text-xs sm:text-sm h-9"
+            className={showCompare ? "flex-1 text-xs sm:text-sm h-9" : "w-full text-xs sm:text-sm h-9"}
           />
-          <CompareButton 
-            product={product} 
-            variant="outline"
-            size="default"
-            className="flex-1 text-xs sm:text-sm h-9"
+          {showCompare && (
+            <CompareButton 
+              product={product} 
+              variant="outline"
+              size="default"
+              className="flex-1 text-xs sm:text-sm h-9"
           />
+          )}
         </div>
         {/* View Details button at bottom - same width as upper buttons row */}
         <div className="w-full" onClick={(e) => e.stopPropagation()}>

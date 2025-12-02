@@ -18,6 +18,7 @@ from app.docs import get_scalar_html
 from app.middleware.validation import RequestValidationMiddleware, ErrorHandlingMiddleware
 from app.middleware.rate_limit import limiter, rate_limit_exceeded_handler
 from app.middleware.metrics import MetricsMiddleware
+from app.services.email_service import send_startup_error_notification
 from slowapi.errors import RateLimitExceeded
 
 # Setup logging first
@@ -29,6 +30,8 @@ try:
     validate_and_log()
 except Exception as e:
     logger.error(f"Environment validation failed: {e}")
+    # Note: Can't use async email here as we're not in async context yet
+    # Email will be sent if app fails to start
     if settings.ENVIRONMENT == "production":
         raise
 
@@ -38,33 +41,47 @@ async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown events."""
     # Startup
     logger.info("Starting up application...")
-    try:
-        # Initialize database - create tables if they don't exist
-        logger.info("Initializing database...")
-        init_db()
-        logger.info("Database initialized successfully")
-    except Exception as e:
-        logger.error(f"Failed to initialize database: {e}")
-        raise
     
-    # Initialize Redis connection
-    try:
-        logger.info("Initializing Redis connection...")
-        get_redis_client()
-        logger.info("Redis connection initialized successfully")
-    except Exception as e:
-        logger.warning(f"Failed to initialize Redis (will continue without cache): {e}")
-        # Continue without Redis - it's optional for caching
+    # Skip database initialization in test environment
+    if settings.ENVIRONMENT != "test":
+        try:
+            # Initialize database - create tables if they don't exist
+            logger.info("Initializing database...")
+            init_db()
+            logger.info("Database initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize database: {e}")
+            # Send email notification
+            await send_startup_error_notification(e, component="Database")
+            raise
+    else:
+        logger.info("Skipping database initialization in test environment")
     
-    # Sync products on startup (check DB and scrape if needed)
-    if settings.SYNC_ON_STARTUP:
+    # Initialize Redis connection (skip in test environment)
+    if settings.ENVIRONMENT != "test":
+        try:
+            logger.info("Initializing Redis connection...")
+            get_redis_client()
+            logger.info("Redis connection initialized successfully")
+        except Exception as e:
+            logger.warning(f"Failed to initialize Redis (will continue without cache): {e}")
+            # Send email notification (non-critical, but still notify)
+            await send_startup_error_notification(e, component="Redis")
+            # Continue without Redis - it's optional for caching
+    else:
+        logger.info("Skipping Redis initialization in test environment")
+    
+    # Sync products on startup (check DB and scrape if needed) - skip in test
+    if settings.SYNC_ON_STARTUP and settings.ENVIRONMENT != "test":
         # Run sync in background task to not block startup
         async def run_startup_sync():
             """Run startup sync in background."""
-            try:
-                await sync_products_on_startup()
-            except Exception as e:
-                logger.error(f"Error in startup sync: {e}", exc_info=True)
+        try:
+            await sync_products_on_startup()
+        except Exception as e:
+            logger.error(f"Error in startup sync: {e}", exc_info=True)
+            # Send email notification
+            await send_startup_error_notification(e, component="Product Sync")
         
         try:
             logger.info("Starting initial product sync in background...")
@@ -73,17 +90,24 @@ async def lifespan(app: FastAPI):
             logger.info("Initial sync task created (running in background)")
         except Exception as e:
             logger.error(f"Failed to start initial sync: {e}", exc_info=True)
+            # Send email notification
+            await send_startup_error_notification(e, component="Product Sync Task")
     else:
         logger.info("Startup sync is disabled. Skipping initial product sync.")
     
-    # Start scheduler for periodic scraping
-    try:
-        logger.info("Starting scheduler...")
-        start_scheduler()
-        logger.info("Scheduler started successfully")
-    except Exception as e:
-        logger.error(f"Failed to start scheduler: {e}", exc_info=True)
-        # Continue even if scheduler fails
+    # Start scheduler for periodic scraping (skip in test environment)
+    if settings.ENVIRONMENT != "test":
+        try:
+            logger.info("Starting scheduler...")
+            start_scheduler()
+            logger.info("Scheduler started successfully")
+        except Exception as e:
+            logger.error(f"Failed to start scheduler: {e}", exc_info=True)
+            # Send email notification
+            await send_startup_error_notification(e, component="Scheduler")
+            # Continue even if scheduler fails
+    else:
+        logger.info("Skipping scheduler start in test environment")
     
     yield
     

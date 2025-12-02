@@ -37,7 +37,7 @@ class RAGService:
             product_info = f"""
 Product {i}:
 - Title: {product.title}
-- Price: ${product.price if product.price else 'N/A'}
+- Price: ₹{product.price if product.price else 'N/A'}
 - Vendor: {product.vendor or 'N/A'}
 - Category: {product.product_type or 'N/A'}
 - Description: {product.description[:200] if product.description else 'N/A'}
@@ -72,7 +72,7 @@ Product {i}:
                 price_range = "mid-range"
             else:
                 price_range = "premium"
-            context_parts.append(f"Products are in the {price_range} price range (average ${avg_price:.0f}).")
+            context_parts.append(f"Products are in the {price_range} price range (average ₹{avg_price:.0f}).")
         
         return " ".join(context_parts)
     
@@ -361,8 +361,8 @@ IMPORTANT: For each bullet point, ALWAYS start with the product identifier follo
 Use these identifiers: {', '.join(product_identifiers)}
 
 Example format:
-• Product 1 (Zen Nova): $2698.0
-• Product 2 (Zen Halo): $2698.0
+• Product 1 (Zen Nova): ₹2698.0
+• Product 2 (Zen Halo): ₹2698.0
 
 For Pros & Cons, ensure you provide pros and cons for EACH product separately. Example:
 • Product 1 (Zen Nova): Pros: Unique design, Cons: May not suit everyone

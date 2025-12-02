@@ -1,4 +1,9 @@
 """Pytest configuration and fixtures."""
+import os
+
+# Set test environment BEFORE any other imports
+os.environ["ENVIRONMENT"] = "test"
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine

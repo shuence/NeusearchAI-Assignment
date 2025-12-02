@@ -1,14 +1,14 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Header } from "@/components/layout/header";
+import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ProductCarousel } from "@/components/features/products/product-carousel";
 import { sendChatMessage, type ChatMessage } from "@/lib/api/chat";
 import type { Product } from "@/types/product";
-import { Send, Loader2, Sparkles, Trash2 } from "lucide-react";
+import { Send, Loader2, Sparkles, Trash2, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { ROUTES } from "@/lib/constants";
 
@@ -23,15 +23,15 @@ const SUGGESTIONS = [
 
 const STORAGE_KEY = "neusearch_chat_messages";
 
-const DEFAULT_MESSAGE: ChatMessage = {
+const getDefaultMessage = (): ChatMessage => ({
   role: "assistant",
   content: "Hello! I'm your product recommendation assistant. How can I help you find the perfect products today?",
   timestamp: new Date().toISOString(),
-};
+});
 
 // Load messages from localStorage
 const loadMessagesFromStorage = (): ChatMessage[] => {
-  if (typeof window === "undefined") return [DEFAULT_MESSAGE];
+  if (typeof window === "undefined") return [];
   
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -45,7 +45,7 @@ const loadMessagesFromStorage = (): ChatMessage[] => {
   } catch (error) {
     console.error("Error loading messages from localStorage:", error);
   }
-  return [DEFAULT_MESSAGE];
+  return [getDefaultMessage()];
 };
 
 // Save messages to localStorage
@@ -60,11 +60,24 @@ const saveMessagesToStorage = (messages: ChatMessage[]) => {
 };
 
 export default function ChatPage() {
-  const [messages, setMessages] = useState<ChatMessage[]>(loadMessagesFromStorage);
+  const router = useRouter();
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [isMounted, setIsMounted] = useState(false);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Load messages from localStorage only on client side after mount
+  useEffect(() => {
+    setIsMounted(true);
+    const loadedMessages = loadMessagesFromStorage();
+    if (loadedMessages.length === 0) {
+      setMessages([getDefaultMessage()]);
+    } else {
+      setMessages(loadedMessages);
+    }
+  }, []);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -72,8 +85,10 @@ export default function ChatPage() {
 
   // Save messages to localStorage whenever they change
   useEffect(() => {
-    saveMessagesToStorage(messages);
-  }, [messages]);
+    if (isMounted) {
+      saveMessagesToStorage(messages);
+    }
+  }, [messages, isMounted]);
 
   useEffect(() => {
     scrollToBottom();
@@ -166,7 +181,7 @@ export default function ChatPage() {
 
   const handleClearHistory = () => {
     if (confirm("Are you sure you want to clear the chat history?")) {
-      const defaultMessages = [DEFAULT_MESSAGE];
+      const defaultMessages = [getDefaultMessage()];
       setMessages(defaultMessages);
       saveMessagesToStorage(defaultMessages);
       toast.success("Chat history cleared");
@@ -175,14 +190,23 @@ export default function ChatPage() {
 
   return (
     <div className="h-screen bg-background flex flex-col overflow-hidden">
-      <Header />
-
       <main className="flex-1 flex flex-col overflow-hidden">
         <div className="container mx-auto px-3 sm:px-4 py-3 sm:py-4 shrink-0 border-b">
           <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1.5 sm:gap-2">
-              <Sparkles className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
-              <h2 className="text-lg sm:text-xl font-bold">AI Chat Assistant</h2>
+            <div className="flex items-center gap-2 sm:gap-3">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => router.back()}
+                className="h-8 w-8 sm:h-9 sm:w-9"
+                aria-label="Go back"
+              >
+                <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5" />
+              </Button>
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <Sparkles className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
+                <h2 className="text-lg sm:text-xl font-bold">AI Chat Assistant</h2>
+              </div>
             </div>
             {messages.length > 1 && (
               <Button
@@ -226,7 +250,7 @@ export default function ChatPage() {
                         <p className="whitespace-pre-wrap text-sm sm:text-base leading-relaxed">
                           {message.content}
                         </p>
-                        {message.timestamp && (
+                        {message.timestamp && isMounted && (
                           <p
                             className={`text-xs mt-2 ${
                               message.role === "user"

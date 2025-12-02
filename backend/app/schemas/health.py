@@ -47,3 +47,15 @@ class HealthResponse(BaseModel):
     redis_status: Optional[str] = None
     embedding_service_status: Optional[str] = None
     components: Optional[dict] = None
+
+
+class ProtectedAccessRequest(BaseModel):
+    """Request model for protected endpoint access."""
+    code: str
+
+
+class ProtectedAccessResponse(BaseModel):
+    """Response model for protected endpoint access."""
+    success: bool
+    message: str
+    access_granted: bool

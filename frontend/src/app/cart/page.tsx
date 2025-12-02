@@ -58,17 +58,23 @@ export default function CartPage() {
 
   if (items.length === 0) {
     return (
-      <div className="min-h-screen bg-background flex flex-col">
+      <div className="h-screen bg-background flex flex-col">
         <Header />
         <main className="container mx-auto px-4 py-8 flex-1 flex flex-col items-center justify-center">
-          <div className="text-center space-y-4 max-w-md">
-            <ShoppingCart className="h-16 w-16 mx-auto text-muted-foreground" />
-            <h1 className="text-3xl font-bold">Your cart is empty</h1>
-            <p className="text-muted-foreground">
-              Looks like you haven't added any items to your cart yet.
-            </p>
+          <div className="text-center space-y-6 max-w-md">
+            <div className="flex justify-center">
+              <div className="rounded-full bg-muted p-6">
+                <ShoppingCart className="h-16 w-16 text-muted-foreground" />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <h1 className="text-3xl font-bold">Your cart is empty</h1>
+              <p className="text-muted-foreground text-lg">
+                Looks like you haven't added any items to your cart yet.
+              </p>
+            </div>
             <Link href={ROUTES.HOME}>
-              <Button size="lg" className="mt-4">
+              <Button size="lg" className="mt-6">
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 Continue Shopping
               </Button>
