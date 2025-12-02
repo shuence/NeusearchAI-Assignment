@@ -268,24 +268,8 @@ export function ProductImageCarousel({
 
           {/* Sizes Row */}
         <div className="space-y-2">
-            <p className="text-xs text-muted-foreground">Size</p>
+            <p className="text-xs text-muted-foreground">Available sizes</p>
           <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedSize(null);
-                  if (!selectedColor && allImages.length > 0 && api) {
-                    scrollToImage(allImages[0]);
-                  }
-                }}
-                className={`px-3 py-1.5 rounded-md border text-sm transition-all cursor-pointer ${
-                  !selectedSize
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "border-muted hover:border-primary/50 hover:bg-primary/5"
-                }`}
-              >
-                All
-              </button>
               {(() => {
                 // Filter sizes based on selected color if one is selected, and only show available ones
                 const availableSizes = selectedColor

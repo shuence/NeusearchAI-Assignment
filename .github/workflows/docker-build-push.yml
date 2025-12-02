@@ -8,7 +8,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
 
     env:
       ENVIRONMENT: production
@@ -47,6 +47,8 @@ jobs:
           echo "IMAGE_NAME=${IMAGE_NAME}:latest" >> $GITHUB_ENV
           echo "IMAGE_NAME_SHORT=${IMAGE_NAME}" >> $GITHUB_ENV
           echo "IMAGE_TAG=${{ github.sha }}" >> $GITHUB_ENV
+          echo "REPO_NAME=${REPO_NAME}" >> $GITHUB_ENV
+          echo "DOCKERHUB_USERNAME=${DOCKERHUB_USERNAME}" >> $GITHUB_ENV
           echo "Built images will be: ${IMAGE_NAME}:latest and ${IMAGE_NAME}:${{ github.sha }}"
 
       - name: Build Docker image
@@ -64,4 +66,53 @@ jobs:
       - name: Push image (commit SHA)
         run: |
           docker push ${{ env.IMAGE_NAME_SHORT }}:${{ env.IMAGE_TAG }}
+
+      - name: Get commit message
+        id: commit
+        run: |
+          COMMIT_MSG=$(git log -1 --pretty=format:"%s")
+          COMMIT_AUTHOR=$(git log -1 --pretty=format:"%an")
+          COMMIT_DATE=$(git log -1 --pretty=format:"%ad" --date=format:"%Y-%m-%d %H:%M:%S")
+          echo "MESSAGE<<EOF" >> $GITHUB_OUTPUT
+          echo "$COMMIT_MSG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "AUTHOR=$COMMIT_AUTHOR" >> $GITHUB_OUTPUT
+          echo "DATE=$COMMIT_DATE" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ env.IMAGE_TAG }}
+          name: Release ${{ env.IMAGE_TAG }}
+          body: |
+            ## 🚀 Release ${{ env.IMAGE_TAG }}
+            
+            **Commit:** `${{ github.sha }}`
+            **Author:** ${{ steps.commit.outputs.AUTHOR }}
+            **Date:** ${{ steps.commit.outputs.DATE }}
+            **Message:** ${{ steps.commit.outputs.MESSAGE }}
+            
+            ### 🐳 Docker Images
+            
+            Docker images have been built and pushed to Docker Hub:
+            
+            - **Latest:** [`${{ env.IMAGE_NAME }}`](https://hub.docker.com/r/${{ env.DOCKERHUB_USERNAME }}/${{ env.REPO_NAME }}:latest)
+            - **Tagged:** [`${{ env.IMAGE_NAME_SHORT }}:${{ env.IMAGE_TAG }}`](https://hub.docker.com/r/${{ env.DOCKERHUB_USERNAME }}/${{ env.REPO_NAME }}:${{ env.IMAGE_TAG }})
+            
+            ### 📦 Pull Commands
+            
+            ```bash
+            # Pull latest image
+            docker pull ${{ env.IMAGE_NAME }}
+            
+            # Pull specific commit image
+            docker pull ${{ env.IMAGE_NAME_SHORT }}:${{ env.IMAGE_TAG }}
+            ```
+            
+            ### 🔗 Links
+            
+            - [Docker Hub Repository](https://hub.docker.com/r/${{ env.DOCKERHUB_USERNAME }}/${{ env.REPO_NAME }})
+            - [Commit ${{ github.sha }}](https://github.com/${{ github.repository }}/commit/${{ github.sha }})
+          draft: false
+          prerelease: false
 
