@@ -277,4 +277,119 @@ Remember: DO NOT include product names or create lists. Just provide a natural c
                 "needs_clarification": False,
                 "scores": []
             }
+    
+    def compare_products(self, products: List[Product]) -> str:
+        """
+        Compare products and generate AI insights.
+        
+        Args:
+            products: List of products to compare (2-4 products)
+        
+        Returns:
+            AI-generated comparison insight string
+        """
+        if not products or len(products) < 2:
+            return "Please provide at least 2 products to compare."
+        
+        if len(products) > 4:
+            products = products[:4]  # Limit to 4 products
+        
+        try:
+            if not self.llm_client:
+                # Fallback: generate simple comparison
+                product_titles = ", ".join([p.title for p in products])
+                return f"Comparing {len(products)} products: {product_titles}. Please enable LLM for detailed insights."
+            
+            # Build comparison prompt
+            product_context = self._format_product_context(products)
+            
+            system_prompt = """You are a helpful product comparison assistant. Your role is to provide structured, easy-to-read comparisons between products.
+
+IMPORTANT GUIDELINES:
+1. Format your response as structured bullet points organized by category
+2. Use clear categories like: Price & Value, Key Features, Best For, Pros & Cons
+3. Be objective and balanced in your comparison
+4. Make it easy to scan and understand quickly
+5. Use bullet points (•) for each comparison point
+6. Focus on actionable insights that help users make decisions
+7. Keep each bullet point concise (one line or short phrase)
+
+Format your response like this (IMPORTANT: Always prefix each bullet point with the product name or identifier):
+**Price & Value**
+• [Product Name/Identifier]: [price info and value]
+• [Product Name/Identifier]: [price info and value]
+
+**Key Features**
+• [Product Name/Identifier]: [key features]
+• [Product Name/Identifier]: [key features]
+
+**Best For**
+• [Product Name/Identifier]: [use cases]
+• [Product Name/Identifier]: [use cases]
+
+**Pros & Cons**
+• [Product Name/Identifier]: Pros: [list pros], Cons: [list cons]
+OR format as:
+• [Product Name/Identifier]: [pros and cons description]
+• [Product Name/Identifier]: [pros and cons description]
+
+**Summary**
+• [Overall recommendation or key takeaway]
+
+CRITICAL: For each bullet point, ALWAYS start with the product name or a clear identifier (like "Product 1", "Product 2", or use part of the product title) followed by a colon (:). This ensures each point can be matched to the correct product.
+
+Product Context:
+"""
+            
+            # Build product identifiers for the prompt
+            product_identifiers = []
+            for i, product in enumerate(products, 1):
+                # Use first few words of title as identifier
+                title_words = product.title.split()[:3]
+                identifier = " ".join(title_words)
+                product_identifiers.append(f"Product {i} ({identifier})")
+            
+            user_prompt = f"""
+Please compare these {len(products)} products using structured bullet points organized by:
+1. Price & Value - Compare prices and value proposition
+2. Key Features - Highlight main feature differences
+3. Best For - Best use cases for each product
+4. Pros & Cons - List pros and cons for EACH product separately. Format: "Product X: Pros: [list], Cons: [list]" or "Product X: [pros and cons]"
+5. Summary - Overall recommendation
+
+IMPORTANT: For each bullet point, ALWAYS start with the product identifier followed by a colon (:).
+Use these identifiers: {', '.join(product_identifiers)}
+
+Example format:
+• Product 1 (Zen Nova): $2698.0
+• Product 2 (Zen Halo): $2698.0
+
+For Pros & Cons, ensure you provide pros and cons for EACH product separately. Example:
+• Product 1 (Zen Nova): Pros: Unique design, Cons: May not suit everyone
+• Product 2 (Zen Halo): Pros: Classic style, Cons: Less distinctive
+
+For Summary, provide a concise overall recommendation based on the comparison.
+
+Use bullet points (•) for each point. Make it easy to scan and compare quickly.
+"""
+            
+            prompt = system_prompt + product_context + "\n\n" + user_prompt
+            
+            logger.info(f"Generating comparison insight for {len(products)} products...")
+            response = self.llm_client.models.generate_content(
+                model=self.llm_model,
+                contents=prompt
+            )
+            
+            insight = response.text if hasattr(response, 'text') else str(response)
+            
+            # Clean up the response
+            cleaned_insight = re.sub(r'\n{3,}', '\n\n', insight)
+            cleaned_insight = cleaned_insight.strip()
+            
+            return cleaned_insight if cleaned_insight else "Unable to generate comparison insight."
+            
+        except Exception as e:
+            logger.error(f"Error generating comparison insight: {e}", exc_info=True)
+            return "I'm sorry, I encountered an error while generating the comparison. Please try again."
 

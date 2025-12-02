@@ -1,20 +1,23 @@
 # Build stage
 FROM node:20-alpine AS builder
 
+# Install pnpm
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
 # Set working directory
 WORKDIR /app
 
 # Copy package files
-COPY package.json yarn.lock ./
+COPY package.json pnpm-lock.yaml ./
 
 # Install dependencies
-RUN yarn install --frozen-lockfile
+RUN pnpm install --frozen-lockfile
 
 # Copy application code
 COPY . .
 
 # Build the application
-RUN yarn build
+RUN pnpm build
 
 # Production stage
 FROM node:20-alpine AS runner
@@ -27,7 +30,7 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # Copy package files
-COPY package.json yarn.lock ./
+COPY package.json pnpm-lock.yaml ./
 
 # Copy node_modules from builder (includes TypeScript needed for next.config.ts)
 COPY --from=builder /app/node_modules ./node_modules
@@ -46,5 +49,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
     CMD node -e "require('http').get('http://localhost:3000', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})" || exit 1
 
 # Run the application
-CMD ["yarn", "start"]
+CMD ["pnpm", "start"]
 

@@ -4,20 +4,28 @@ import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Header } from "@/components/layout/header";
+import { Footer } from "@/components/layout/footer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ProductImageCarousel } from "@/components/features/products/product-image-carousel";
-import { getProductById } from "@/lib/api/products";
+import { ProductDetailSkeleton } from "@/components/features/products/product-detail-skeleton";
+import { getProductById, getSimilarProducts } from "@/lib/api/products";
+import { ProductGrid } from "@/components/features/products/product-grid";
+import { CompareButton } from "@/components/features/products/compare-button";
 import { ROUTES } from "@/lib/constants";
 import type { Product } from "@/types/product";
 import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function ProductDetailPage() {
   const params = useParams();
   const router = useRouter();
   const id = params.id as string;
   const [product, setProduct] = useState<Product | null>(null);
+  const [similarProducts, setSimilarProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingSimilar, setIsLoadingSimilar] = useState(false);
 
   useEffect(() => {
     const fetchProduct = async () => {
@@ -29,8 +37,24 @@ export default function ProductDetailPage() {
           return;
         }
         setProduct(data);
+        
+        // Fetch similar products
+        if (data) {
+          setIsLoadingSimilar(true);
+          try {
+            const similar = await getSimilarProducts(data.id, 4);
+            setSimilarProducts(similar);
+          } catch (error) {
+            console.error("Error loading similar products:", error);
+          } finally {
+            setIsLoadingSimilar(false);
+          }
+        }
       } catch (error) {
         console.error("Error loading product:", error);
+        toast.error("Failed to load product", {
+          description: error instanceof Error ? error.message : "Product not found.",
+        });
         router.push("/not-found");
       } finally {
         setIsLoading(false);
@@ -44,14 +68,13 @@ export default function ProductDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen bg-background flex flex-col">
         <Header />
-        <main className="container mx-auto px-4 py-8">
-          <div className="text-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
-            <p className="text-muted-foreground">Loading product...</p>
-          </div>
+        <main className="container mx-auto px-4 py-8 flex-1">
+          <Skeleton className="h-6 w-32 mb-6" />
+          <ProductDetailSkeleton />
         </main>
+        <Footer />
       </div>
     );
   }
@@ -60,6 +83,7 @@ export default function ProductDetailPage() {
     return null;
   }
 
+  // Extract variants from features for image carousel
   let variants: Array<{
     title?: string;
     sku?: string;
@@ -76,13 +100,13 @@ export default function ProductDetailPage() {
     };
   }> | undefined;
 
-  if (product.attributes) {
-    const variantsKey = Object.keys(product.attributes).find(
+  if (product.features) {
+    const variantsKey = Object.keys(product.features).find(
       (key) => key.toLowerCase() === "variants"
     );
     
     if (variantsKey) {
-      const variantsValue = product.attributes[variantsKey];
+      const variantsValue = product.features[variantsKey];
       if (Array.isArray(variantsValue) && variantsValue.length > 0) {
         variants = variantsValue.map((v: unknown) => {
           const variant = v as Record<string, unknown>;
@@ -110,10 +134,10 @@ export default function ProductDetailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background flex flex-col">
       <Header />
 
-      <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto px-4 py-8 flex-1">
         <Link
           href={ROUTES.HOME}
           className="text-sm text-muted-foreground hover:text-foreground mb-6 inline-block"
@@ -160,35 +184,16 @@ export default function ProductDetailPage() {
               </CardContent>
             </Card>
 
-            {product.tags && product.tags.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Tags</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex flex-wrap gap-2">
-                    {product.tags.map((tag, index) => (
-                      <span
-                        key={index}
-                        className="px-2 py-1 bg-muted rounded-md text-sm text-muted-foreground"
-                      >
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-            {product.features && product.features.length > 0 && (
+            {product.ai_features && product.ai_features.length > 0 && (
               <Card>
                 <CardHeader>
                   <CardTitle>Features</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <ul className="list-disc list-inside space-y-2">
-                    {product.features.map((feature, index) => (
+                    {product.ai_features.map((feature, index) => (
                       <li key={index} className="text-muted-foreground">
-                        {typeof feature === "string" ? feature : String(feature)}
+                        {feature}
                       </li>
                     ))}
                   </ul>
@@ -196,120 +201,31 @@ export default function ProductDetailPage() {
               </Card>
             )}
 
-            {product.attributes && Object.keys(product.attributes).length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Attributes</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <dl className="space-y-4">
-                    {Object.entries(product.attributes).map(([key, value]) => {
-                      if (Array.isArray(value) && value.length > 0 && typeof value[0] === "object") {
-                        return (
-                          <div key={key} className="space-y-2">
-                            <dt className="font-medium mb-2">{key}:</dt>
-                            <dd className="text-muted-foreground">
-                              <div className="space-y-2 pl-4 border-l-2 border-muted">
-                                {value.map((item: unknown, index: number) => {
-                                  const obj = item as Record<string, unknown>;
-                                  const variantInfo = [
-                                    obj.title && `Title: ${obj.title}`,
-                                    obj.sku && `SKU: ${obj.sku}`,
-                                    obj.price && `Price: ₹${Number(obj.price).toLocaleString()}`,
-                                    obj.compare_at_price && `Compare: ₹${Number(obj.compare_at_price).toLocaleString()}`,
-                                    obj.option1 && `Option 1: ${obj.option1}`,
-                                    obj.option2 && `Option 2: ${obj.option2}`,
-                                    obj.option3 && `Option 3: ${obj.option3}`,
-                                    obj.available !== undefined && `Available: ${obj.available ? "Yes" : "No"}`,
-                                  ]
-                                    .filter(Boolean)
-                                    .join(" • ");
-                                  
-                                  return (
-                                    <div key={index} className="text-sm">
-                                      <span className="font-medium">Variant {index + 1}:</span> {variantInfo || "N/A"}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </dd>
-                          </div>
-                        );
-                      }
-                      
-                      if (typeof value === "object" && value !== null && !Array.isArray(value)) {
-                        const obj = value as Record<string, unknown>;
-                        return (
-                          <div key={key} className="space-y-2">
-                            <dt className="font-medium mb-2">{key}:</dt>
-                            <dd className="text-muted-foreground">
-                              <div className="space-y-1 pl-4 border-l-2 border-muted">
-                                {Object.entries(obj).map(([nestedKey, nestedValue]) => {
-                                  let displayValue: string;
-                                  if (nestedValue === null || nestedValue === undefined) {
-                                    displayValue = "N/A";
-                                  } else if (Array.isArray(nestedValue)) {
-                                    displayValue = nestedValue.map(String).join(", ");
-                                  } else if (typeof nestedValue === "object") {
-                                    displayValue = JSON.stringify(nestedValue);
-                                  } else {
-                                    displayValue = String(nestedValue);
-                                  }
-                                  return (
-                                    <div key={nestedKey} className="text-sm">
-                                      <span className="font-medium">{nestedKey}:</span> {displayValue}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </dd>
-                          </div>
-                        );
-                      }
-                      
-                      if (Array.isArray(value)) {
-                        return (
-                          <div key={key} className="flex justify-between">
-                            <dt className="font-medium">{key}:</dt>
-                            <dd className="text-muted-foreground">
-                              {value.map(String).join(", ")}
-                            </dd>
-                          </div>
-                        );
-                      }
-                      
-                      let displayValue: string;
-                      if (value === null || value === undefined) {
-                        displayValue = "N/A";
-                      } else if (typeof value === "string" && value.match(/^\d{4}-\d{2}-\d{2}T/)) {
-                        try {
-                          const date = new Date(value);
-                          displayValue = date.toLocaleString();
-                        } catch {
-                          displayValue = String(value);
-                        }
-                      } else {
-                        displayValue = String(value);
-                      }
 
-                      return (
-                        <div key={key} className="flex justify-between">
-                          <dt className="font-medium">{key}:</dt>
-                          <dd className="text-muted-foreground">{displayValue}</dd>
-                        </div>
-                      );
-                    })}
-                  </dl>
-                </CardContent>
-              </Card>
-            )}
-
-            <Button size="lg" className="w-full">
-              Add to Cart
-            </Button>
+            <div className="flex flex-col gap-3">
+              <Button size="lg" className="w-full">
+                Add to Cart
+              </Button>
+              <CompareButton product={product} size="lg" className="w-full" />
+            </div>
           </div>
         </div>
+
+        {/* Similar Products Section */}
+        {similarProducts.length > 0 && (
+          <div className="mt-16">
+            <h2 className="text-2xl font-bold mb-6">You Might Also Like</h2>
+            {isLoadingSimilar ? (
+              <div className="text-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" />
+              </div>
+            ) : (
+              <ProductGrid products={similarProducts} />
+            )}
+          </div>
+        )}
       </main>
+      <Footer />
     </div>
   );
 }

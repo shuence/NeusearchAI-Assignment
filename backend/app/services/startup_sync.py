@@ -6,6 +6,7 @@ from app.services.products.hunnit.db_service import HunnitProductDBService
 from app.config.settings import settings
 from app.utils.logger import get_logger
 from app.rag.generate_embeddings import generate_embeddings_for_products
+from app.services.generate_ai_features import generate_ai_features_for_products
 
 logger = get_logger("startup_sync")
 
@@ -53,6 +54,23 @@ async def sync_products_on_startup():
                 logger.error(f"Initial sync failed: {response.message}")
         else:
             logger.info(f"Database already has {product_count} products. Skipping initial scrape.")
+        
+        # Generate AI features for products that don't have them (after sync or if sync was skipped)
+        try:
+            logger.info("Checking for products without AI features...")
+            successful, failed = generate_ai_features_for_products(db, batch_size=10)
+            if successful > 0:
+                logger.info(f"Generated AI features for {successful} products during startup")
+            if failed > 0:
+                logger.warning(f"Failed to generate AI features for {failed} products during startup")
+            if successful == 0 and failed == 0:
+                logger.info("All products already have AI features")
+        except ValueError as ai_features_error:
+            # This usually means GEMINI_API_KEY is not set
+            logger.warning(f"AI feature generation skipped: {ai_features_error}")
+        except Exception as ai_features_error:
+            logger.warning(f"Could not generate AI features during startup: {ai_features_error}")
+            # Continue - AI features are optional and can be generated later
         
         # Generate embeddings for products that don't have them (after sync or if sync was skipped)
         if settings.GENERATE_EMBEDDINGS_ON_STARTUP:

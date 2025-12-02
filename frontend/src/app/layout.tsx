@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { Toaster } from "@/components/ui/toaster";
+import { ThemeProvider } from "@/components/providers/theme-provider";
+import { ComparisonProvider } from "@/contexts/comparison-context";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -13,8 +16,31 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Neusearch AI - Product Discovery Assistant",
-  description: "AI-powered product discovery assistant with RAG capabilities",
+  title: {
+    default: "Neusearch AI - Product Discovery Assistant",
+    template: "%s | Neusearch AI",
+  },
+  description: "AI-powered product discovery assistant with RAG capabilities. Find the perfect products using natural language queries.",
+  keywords: ["AI", "product discovery", "RAG", "e-commerce", "product recommendations", "semantic search"],
+  authors: [{ name: "Neusearch AI" }],
+  creator: "Neusearch AI",
+  openGraph: {
+    type: "website",
+    locale: "en_US",
+    url: "https://neusearch.ai",
+    siteName: "Neusearch AI",
+    title: "Neusearch AI - Product Discovery Assistant",
+    description: "AI-powered product discovery assistant with RAG capabilities",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Neusearch AI - Product Discovery Assistant",
+    description: "AI-powered product discovery assistant with RAG capabilities",
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
 };
 
 export default function RootLayout({
@@ -27,7 +53,17 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <ComparisonProvider>
+            {children}
+            <Toaster />
+          </ComparisonProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

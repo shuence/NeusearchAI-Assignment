@@ -25,6 +25,7 @@ class Product(Base):
     tags = Column(ARRAY(String), nullable=True)
     image_urls = Column(ARRAY(String), nullable=True)
     features = Column(JSON, nullable=True)  # Store variant info, options, etc.
+    ai_features = Column(ARRAY(String), nullable=True)  # AI-generated features
     
     # Vector embedding for semantic search
     embedding = Column(Vector(1536), nullable=True)  # 1536 for OpenAI, adjust for other models

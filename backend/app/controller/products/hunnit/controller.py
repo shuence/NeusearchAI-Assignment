@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.services.products.hunnit.service import HunnitScraperService
 from app.services.products.hunnit.db_service import HunnitProductDBService
 from app.services.products.hunnit.redis_service import HunnitProductRedisService
-from app.schemas.products.hunnit.schemas import Product, ScrapeResponse
+from app.schemas.products.hunnit.schemas import Product, ScrapeResponse, DBProduct
 from app.utils.logger import get_logger
 
 logger = get_logger("hunnit_controller")
@@ -209,4 +209,239 @@ class HunnitController:
         
         db_service = HunnitProductDBService(self.db)
         return db_service.get_product_count()
+    
+    def get_similar_products(
+        self,
+        product_id: str,
+        limit: int = 4,
+        similarity_threshold: float = 0.6
+    ) -> List:
+        """
+        Get similar products using vector search.
+        
+        Args:
+            product_id: The ID of the product to find similar products for
+            limit: Maximum number of similar products to return
+            similarity_threshold: Minimum similarity score (0-1)
+            
+        Returns:
+            List of similar Product models
+        """
+        if not self.db:
+            raise ValueError("Database session not available")
+        
+        try:
+            from app.rag.vector_search import VectorSearchService
+            
+            # Get the product
+            product = self.get_product_from_db_by_id(product_id)
+            if not product:
+                product = self.get_product_from_db_by_external_id(product_id)
+            
+            if not product or product.embedding is None:
+                return []
+            
+            # Convert pgvector Vector to list
+            import numpy as np
+            if hasattr(product.embedding, 'tolist'):
+                embedding_list = product.embedding.tolist()
+            elif isinstance(product.embedding, (list, tuple)):
+                embedding_list = list(product.embedding)
+            else:
+                # Try to convert numpy array
+                embedding_array = np.array(product.embedding)
+                embedding_list = embedding_array.tolist()
+            
+            if not embedding_list or len(embedding_list) == 0:
+                return []
+            
+            # Use vector search to find similar products
+            vector_search = VectorSearchService(self.db)
+            similar_results = vector_search.search_similar_products(
+                query_embedding=embedding_list,
+                limit=limit + 1,  # +1 to exclude the product itself
+                similarity_threshold=similarity_threshold
+            )
+            
+            # Filter out the product itself
+            similar_products = []
+            for similar_product, score in similar_results:
+                if str(similar_product.id) != product_id and str(similar_product.external_id) != product_id:
+                    similar_products.append(similar_product)
+                    if len(similar_products) >= limit:
+                        break
+            
+            return similar_products
+        except Exception as e:
+            logger.error(f"Error getting similar products: {e}", exc_info=True)
+            return []
+    
+    def get_cache_status(self) -> dict:
+        """
+        Get Redis cache status and metadata.
+        
+        Returns:
+            Dictionary with cache status information
+        """
+        try:
+            count = self.redis_service.get_products_count()
+            timestamp_info = self.redis_service.get_scrape_timestamp()
+            
+            return {
+                "cache_available": True,
+                "products_cached": count or 0,
+                "last_scrape": timestamp_info,
+                "status": "active" if count else "empty"
+            }
+        except Exception as e:
+            logger.error(f"Error getting cache status: {e}", exc_info=True)
+            return {
+                "cache_available": False,
+                "error": str(e),
+                "status": "unavailable"
+            }
+    
+    def _convert_scraped_product_to_db_product(self, scraped_product: Product) -> DBProduct:
+        """
+        Convert a scraped Product schema to DBProduct schema.
+        
+        Args:
+            scraped_product: Scraped product from Hunnit.com
+            
+        Returns:
+            DBProduct schema
+        """
+        return DBProduct(
+            id=str(scraped_product.id),
+            external_id=str(scraped_product.id),
+            title=scraped_product.title,
+            handle=scraped_product.handle,
+            description=scraped_product.body_html[:500] if scraped_product.body_html else None,
+            body_html=scraped_product.body_html,
+            vendor=scraped_product.vendor,
+            product_type=scraped_product.product_type,
+            category=scraped_product.product_type,
+            tags=scraped_product.tags,
+            image_urls=[str(img.src) for img in scraped_product.images] if scraped_product.images else None,
+        )
+    
+    async def get_all_products_as_db_products(self, from_db: bool = True) -> List[DBProduct]:
+        """
+        Get all products as DBProduct schemas.
+        
+        Args:
+            from_db: If True, get from database. If False, scrape from Hunnit.com
+            
+        Returns:
+            List of DBProduct schemas
+        """
+        if from_db:
+            db_products = self.get_all_products_from_db()
+            return [DBProduct.model_validate(product) for product in db_products]
+        else:
+            # Scrape from Hunnit.com (legacy behavior)
+            response = await self.scrape_all_products(save_to_db=False)
+            if not response.success or response.products is None:
+                return []
+            return [self._convert_scraped_product_to_db_product(p) for p in response.products]
+    
+    async def get_product_as_db_product(
+        self,
+        product_id: str,
+        from_db: bool = True
+    ) -> Optional[DBProduct]:
+        """
+        Get a specific product as DBProduct schema.
+        
+        Args:
+            product_id: The ID of the product (UUID for DB, or external_id)
+            from_db: If True, search in database. If False, scrape from Hunnit.com
+            
+        Returns:
+            DBProduct schema if found, None otherwise
+        """
+        if from_db:
+            # Try to get from database by UUID first
+            product = self.get_product_from_db_by_id(product_id)
+            if product:
+                return DBProduct.model_validate(product)
+            
+            # Try by external_id
+            product = self.get_product_from_db_by_external_id(product_id)
+            if product:
+                return DBProduct.model_validate(product)
+            
+            return None
+        else:
+            # Legacy: scrape from Hunnit.com
+            try:
+                external_id_int = int(product_id)
+                product = await self.get_product_by_id(external_id_int)
+                if product is None:
+                    return None
+                return self._convert_scraped_product_to_db_product(product)
+            except ValueError:
+                return None
+    
+    async def get_products_by_tag_as_db_products(
+        self,
+        tag: str,
+        from_db: bool = True
+    ) -> List[DBProduct]:
+        """
+        Get products filtered by tag as DBProduct schemas.
+        
+        Args:
+            tag: The tag to filter by
+            from_db: If True, search in database. If False, scrape from Hunnit.com
+            
+        Returns:
+            List of DBProduct schemas matching the tag
+        """
+        if from_db:
+            db_products = self.get_products_from_db_by_tag(tag)
+            return [DBProduct.model_validate(product) for product in db_products]
+        else:
+            products = await self.get_products_by_tag(tag)
+            return [self._convert_scraped_product_to_db_product(p) for p in products]
+    
+    async def get_products_by_vendor_as_db_products(
+        self,
+        vendor: str,
+        from_db: bool = True
+    ) -> List[DBProduct]:
+        """
+        Get products filtered by vendor as DBProduct schemas.
+        
+        Args:
+            vendor: The vendor name to filter by
+            from_db: If True, search in database. If False, scrape from Hunnit.com
+            
+        Returns:
+            List of DBProduct schemas from the specified vendor
+        """
+        if from_db:
+            db_products = self.get_products_from_db_by_vendor(vendor)
+            return [DBProduct.model_validate(product) for product in db_products]
+        else:
+            products = await self.get_products_by_vendor(vendor)
+            return [self._convert_scraped_product_to_db_product(p) for p in products]
+    
+    def get_similar_products_as_db_products(
+        self,
+        product_id: str,
+        limit: int = 4
+    ) -> List[DBProduct]:
+        """
+        Get similar products as DBProduct schemas.
+        
+        Args:
+            product_id: The ID of the product to find similar products for
+            limit: Maximum number of similar products to return
+            
+        Returns:
+            List of similar DBProduct schemas
+        """
+        similar_products = self.get_similar_products(product_id, limit=limit)
+        return [DBProduct.model_validate(product) for product in similar_products]
 

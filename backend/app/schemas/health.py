@@ -41,3 +41,9 @@ class HealthResponse(BaseModel):
     process_memory_mb: Optional[float] = None
     process_cpu_percent: Optional[float] = None
     process_num_threads: Optional[int] = None
+    
+    # Component Health Status
+    database_status: Optional[str] = None
+    redis_status: Optional[str] = None
+    embedding_service_status: Optional[str] = None
+    components: Optional[dict] = None

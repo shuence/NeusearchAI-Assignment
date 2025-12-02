@@ -8,7 +8,9 @@ import { Badge } from "@/components/ui/badge";
 import { ProductCarousel } from "@/components/features/products/product-carousel";
 import { sendChatMessage, type ChatMessage } from "@/lib/api/chat";
 import type { Product } from "@/types/product";
-import { Send, Loader2, Sparkles } from "lucide-react";
+import { Send, Loader2, Sparkles, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { ROUTES } from "@/lib/constants";
 
 const SUGGESTIONS = [
   "Show me gym wear that works for meetings",
@@ -116,6 +118,28 @@ export default function ChatPage() {
       setMessages((prev) => [...prev, assistantMessage]);
     } catch (error) {
       console.error("Error sending message:", error);
+      
+      // Show toast notification
+      if (error instanceof Error) {
+        if (error.message.includes("429")) {
+          toast.error("Rate limit exceeded", {
+            description: "Please wait a moment before sending another message.",
+          });
+        } else if (error.message.includes("NetworkError") || error.message.includes("Failed to fetch")) {
+          toast.error("Network error", {
+            description: "Please check your internet connection and try again.",
+          });
+        } else {
+          toast.error("Failed to send message", {
+            description: error.message || "Please try again later.",
+          });
+        }
+      } else {
+        toast.error("An unexpected error occurred", {
+          description: "Please try again later.",
+        });
+      }
+      
       const errorMessage: ChatMessage = {
         role: "assistant",
         content: "I'm sorry, I encountered an error. Please try again.",
@@ -140,27 +164,48 @@ export default function ChatPage() {
     inputRef.current?.focus();
   };
 
+  const handleClearHistory = () => {
+    if (confirm("Are you sure you want to clear the chat history?")) {
+      const defaultMessages = [DEFAULT_MESSAGE];
+      setMessages(defaultMessages);
+      saveMessagesToStorage(defaultMessages);
+      toast.success("Chat history cleared");
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="h-screen bg-background flex flex-col overflow-hidden">
       <Header />
 
-      <main className="container mx-auto px-4 py-8 flex-1 flex flex-col max-w-4xl">
-        <div className="mb-6">
-          <div className="flex items-center gap-2 mb-2">
-            <Sparkles className="h-6 w-6 text-primary" />
-            <h2 className="text-3xl font-bold">AI Chat Assistant</h2>
+      <main className="flex-1 flex flex-col overflow-hidden">
+        <div className="container mx-auto px-3 sm:px-4 py-3 sm:py-4 shrink-0 border-b">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <Sparkles className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
+              <h2 className="text-lg sm:text-xl font-bold">AI Chat Assistant</h2>
+            </div>
+            {messages.length > 1 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleClearHistory}
+                className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm"
+              >
+                <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                <span className="hidden sm:inline">Clear History</span>
+                <span className="sm:hidden">Clear</span>
+              </Button>
+            )}
           </div>
-          <p className="text-muted-foreground">
-            Ask me anything about our products. I can help you find what you're looking for!
-          </p>
         </div>
 
-        <Card className="flex-1 flex flex-col overflow-hidden shadow-lg">
-          <CardContent className="flex-1 flex flex-col p-0">
-            {/* Messages Area */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-gradient-to-b from-background to-muted/20">
+        <div className="container mx-auto px-3 sm:px-4 flex-1 flex flex-col overflow-hidden">
+          <Card className="flex-1 flex flex-col overflow-hidden shadow-lg my-2 sm:my-4 mb-0 rounded-t-lg">
+            <CardContent className="flex-1 flex flex-col p-0 overflow-hidden">
+              {/* Messages Area */}
+              <div className="flex-1 overflow-y-auto px-3 sm:px-4 pt-4 sm:pt-6 pb-6 sm:pb-8 space-y-4 sm:space-y-6 bg-linear-to-b from-background to-muted/20 min-h-0">
               {messages.map((message, index) => (
-                <div key={index} className="space-y-3">
+                <div key={index} className="space-y-2 sm:space-y-3">
                   {/* Message Bubble with Products Integrated */}
                   <div
                     className={`flex ${
@@ -168,17 +213,17 @@ export default function ChatPage() {
                     }`}
                   >
                     <div
-                      className={`max-w-[85%] ${
+                      className={`max-w-[90%] sm:max-w-[85%] ${
                         message.role === "user"
-                          ? "bg-primary text-primary-foreground rounded-2xl px-4 py-3 shadow-md"
+                          ? "bg-primary text-primary-foreground rounded-2xl px-3 py-2 sm:px-4 sm:py-3 shadow-md text-sm"
                           : message.products && message.products.length > 0
                           ? "bg-card border border-border/50 backdrop-blur-sm rounded-2xl overflow-hidden shadow-md"
-                          : "bg-muted text-foreground rounded-2xl px-4 py-3 shadow-sm"
+                          : "bg-muted text-foreground rounded-2xl px-3 py-2 sm:px-4 sm:py-3 shadow-sm text-sm"
                       }`}
                     >
                       {/* Message Text */}
-                      <div className={message.products && message.products.length > 0 ? "px-4 pt-4 pb-2" : ""}>
-                        <p className="whitespace-pre-wrap text-sm leading-relaxed">
+                      <div className={message.products && message.products.length > 0 ? "px-3 sm:px-4 pt-3 sm:pt-4 pb-2" : ""}>
+                        <p className="whitespace-pre-wrap text-sm sm:text-base leading-relaxed">
                           {message.content}
                         </p>
                         {message.timestamp && (
@@ -221,16 +266,16 @@ export default function ChatPage() {
 
             {/* Suggestions */}
             {messages.filter((msg) => msg.role === "user").length === 0 && !isLoading && (
-              <div className="border-t border-border/50 px-4 pt-4 pb-2">
-                <p className="text-xs font-medium text-muted-foreground mb-3">
+              <div className="border-t border-border/50 px-3 sm:px-4 pt-3 sm:pt-4 pb-2 shrink-0">
+                <p className="text-xs font-medium text-muted-foreground mb-2 sm:mb-3">
                   Try asking:
                 </p>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-1.5 sm:gap-2">
                   {SUGGESTIONS.map((suggestion, index) => (
                     <Badge
                       key={index}
                       variant="outline"
-                      className="cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors text-xs py-1.5 px-3"
+                      className="cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors text-[10px] sm:text-xs py-1 sm:py-1.5 px-2 sm:px-3 touch-manipulation"
                       onClick={() => handleSuggestionClick(suggestion)}
                     >
                       {suggestion}
@@ -241,7 +286,7 @@ export default function ChatPage() {
             )}
 
             {/* Input Area */}
-            <div className="border-t border-border/50 bg-background p-4">
+            <div className="border-t border-border/50 bg-background px-3 sm:px-4 pt-3 sm:pt-4 pb-4 sm:pb-6 shrink-0">
               <div className="flex gap-2">
                 <input
                   ref={inputRef}
@@ -249,15 +294,17 @@ export default function ChatPage() {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyPress={handleKeyPress}
-                  placeholder="Ask about products... (e.g., 'Looking for something I can wear in the gym and also in meetings')"
-                  className="flex-1 rounded-lg border border-input bg-background px-4 py-2.5 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-all"
+                  placeholder="Ask about products..."
+                  className="flex-1 rounded-lg border border-input bg-background px-3 sm:px-4 py-2 sm:py-2.5 text-sm focus:outline-none focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 transition-all touch-manipulation"
                   disabled={isLoading}
+                  aria-label="Chat message input"
+                  aria-describedby="chat-input-help"
                 />
                 <Button
                   onClick={handleSend}
                   disabled={!input.trim() || isLoading}
                   size="icon"
-                  className="shrink-0"
+                  className="shrink-0 h-9 w-9 sm:h-10 sm:w-10 touch-manipulation"
                 >
                   {isLoading ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -266,12 +313,13 @@ export default function ChatPage() {
                   )}
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground mt-2 text-center">
+              <p id="chat-input-help" className="text-xs text-muted-foreground mt-2 text-center hidden sm:block">
                 Press Enter to send, Shift+Enter for new line
               </p>
             </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </div>
       </main>
     </div>
   );

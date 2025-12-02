@@ -57,7 +57,7 @@ export function ProductImageGallery({
   return (
     <div className="w-full space-y-4">
       {/* Main Image */}
-      <div className="w-full overflow-hidden rounded-lg bg-muted relative min-h-[400px] flex items-center justify-center">
+      <div className="w-full overflow-hidden rounded-lg bg-[#EEECEB] relative min-h-[400px] flex items-center justify-center">
         <Image
           src={selectedImage || mainImage || "/placeholder.png"}
           alt="Product"
@@ -112,7 +112,7 @@ export function ProductImageGallery({
             <button
               key={index}
               onClick={() => handleThumbnailClick(imageUrl)}
-              className={`w-full overflow-hidden rounded-lg bg-muted relative min-h-[100px] flex items-center justify-center cursor-pointer hover:opacity-80 transition-opacity ${
+              className={`w-full overflow-hidden rounded-lg bg-[#EEECEB] relative min-h-[100px] flex items-center justify-center cursor-pointer hover:opacity-80 transition-opacity ${
                 selectedImage === imageUrl ? "ring-2 ring-primary" : ""
               }`}
             >

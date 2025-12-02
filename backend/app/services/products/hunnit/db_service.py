@@ -5,7 +5,9 @@ from app.models.product import Product as ProductModel
 from app.schemas.products.hunnit.schemas import Product as ScrapedProduct
 from app.utils.logger import get_logger
 from app.rag import get_embedding_service
+from app.config.settings import settings
 from datetime import datetime, timezone
+from google import genai
 
 logger = get_logger("hunnit_db_service")
 
@@ -114,6 +116,76 @@ class HunnitProductDBService:
         
         return features
     
+    def _generate_ai_features(self, product: ScrapedProduct) -> Optional[List[str]]:
+        """Generate AI features for a product using LLM."""
+        if not settings.GEMINI_API_KEY:
+            logger.warning("GEMINI_API_KEY not set - skipping AI feature generation")
+            return None
+        
+        try:
+            llm_client = genai.Client(api_key=settings.GEMINI_API_KEY)
+            model = "gemini-2.0-flash"
+            
+            # Build product context
+            product_info = f"""
+Product Title: {product.title}
+Description: {product.body_html[:500] if product.body_html else 'N/A'}
+Price: {product.variants[0].price if product.variants else 'N/A'}
+Vendor: {product.vendor}
+Product Type: {product.product_type}
+"""
+            
+            prompt = f"""You are a product feature extraction assistant. Based on the product information below, generate a list of 5-10 key features that would be useful for customers.
+
+Focus on:
+- Key product characteristics and benefits
+- Important specifications or attributes
+- Unique selling points
+- Practical use cases or applications
+- Material, design, or quality aspects
+
+Return ONLY a bulleted list of features, one per line, starting with "•". Do not include any other text, explanations, or formatting.
+
+Product Information:
+{product_info}
+
+Features:"""
+            
+            logger.info(f"Generating AI features for product: {product.title}")
+            response = llm_client.models.generate_content(
+                model=model,
+                contents=prompt
+            )
+            
+            ai_response = response.text if hasattr(response, 'text') else str(response)
+            
+            # Parse the response into a list of features
+            features = []
+            for line in ai_response.split('\n'):
+                line = line.strip()
+                if line and (line.startswith('•') or line.startswith('-') or line.startswith('*')):
+                    # Remove bullet point markers
+                    feature = line.lstrip('•-*').strip()
+                    if feature:
+                        features.append(feature)
+                elif line and not line.startswith('Features:'):
+                    # Some models might not use bullets
+                    features.append(line)
+            
+            # Limit to 10 features
+            features = features[:10]
+            
+            if features:
+                logger.info(f"Generated {len(features)} AI features for product: {product.title}")
+                return features
+            else:
+                logger.warning(f"No features extracted from AI response for product: {product.title}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error generating AI features for product {product.title}: {e}", exc_info=True)
+            return None
+    
     def _scraped_to_db_model(self, scraped_product: ScrapedProduct) -> ProductModel:
         """Convert scraped product schema to database model."""
         # Check if product already exists
@@ -160,6 +232,12 @@ class HunnitProductDBService:
             logger.error(f"Error generating embedding for product {scraped_product.title}: {e}")
             # Continue without embedding - don't fail the save operation
         
+        # Generate AI features for the product
+        ai_features = None
+        if not existing_product or not existing_product.ai_features:
+            # Only generate if new product or existing product doesn't have AI features
+            ai_features = self._generate_ai_features(scraped_product)
+        
         if existing_product:
             # Update existing product
             existing_product.title = scraped_product.title
@@ -175,6 +253,8 @@ class HunnitProductDBService:
             existing_product.image_urls = image_urls
             existing_product.features = features
             existing_product.embedding = embedding  # Update embedding
+            if ai_features:
+                existing_product.ai_features = ai_features  # Update AI features if generated
             existing_product.scraped_at = datetime.now(timezone.utc)
             
             logger.info(f"Updating product: {scraped_product.title} (external_id: {scraped_product.id})")
@@ -196,6 +276,7 @@ class HunnitProductDBService:
                 image_urls=image_urls,
                 features=features,
                 embedding=embedding,  # Add embedding
+                ai_features=ai_features,  # Add AI-generated features
             )
             
             logger.info(f"Creating new product: {scraped_product.title} (external_id: {scraped_product.id})")
@@ -293,4 +374,83 @@ class HunnitProductDBService:
     def get_product_count(self) -> int:
         """Get total number of products in the database."""
         return self.db.query(ProductModel).count()
+    
+    def generate_ai_features_for_product(self, product: ProductModel) -> bool:
+        """
+        Generate AI features for an existing database product.
+        
+        Args:
+            product: Product model from database
+            
+        Returns:
+            True if features were generated successfully, False otherwise
+        """
+        if not settings.GEMINI_API_KEY:
+            logger.warning("GEMINI_API_KEY not set - skipping AI feature generation")
+            return False
+        
+        try:
+            llm_client = genai.Client(api_key=settings.GEMINI_API_KEY)
+            model = "gemini-2.0-flash"
+            
+            # Build product context from database product
+            product_info = f"""
+Product Title: {product.title}
+Description: {product.body_html[:500] if product.body_html else (product.description[:500] if product.description else 'N/A')}
+Price: {product.price if product.price else 'N/A'}
+Vendor: {product.vendor or 'N/A'}
+Product Type: {product.product_type or 'N/A'}
+"""
+            
+            prompt = f"""You are a product feature extraction assistant. Based on the product information below, generate a list of 5-10 key features that would be useful for customers.
+
+Focus on:
+- Key product characteristics and benefits
+- Important specifications or attributes
+- Unique selling points
+- Practical use cases or applications
+- Material, design, or quality aspects
+
+Return ONLY a bulleted list of features, one per line, starting with "•". Do not include any other text, explanations, or formatting.
+
+Product Information:
+{product_info}
+
+Features:"""
+            
+            logger.info(f"Generating AI features for product: {product.title} (ID: {product.id})")
+            response = llm_client.models.generate_content(
+                model=model,
+                contents=prompt
+            )
+            
+            ai_response = response.text if hasattr(response, 'text') else str(response)
+            
+            # Parse the response into a list of features
+            features = []
+            for line in ai_response.split('\n'):
+                line = line.strip()
+                if line and (line.startswith('•') or line.startswith('-') or line.startswith('*')):
+                    # Remove bullet point markers
+                    feature = line.lstrip('•-*').strip()
+                    if feature:
+                        features.append(feature)
+                elif line and not line.startswith('Features:'):
+                    # Some models might not use bullets
+                    features.append(line)
+            
+            # Limit to 10 features
+            features = features[:10]
+            
+            if features:
+                product.ai_features = features
+                logger.info(f"Generated {len(features)} AI features for product: {product.title} (ID: {product.id})")
+                return True
+            else:
+                logger.warning(f"No features extracted from AI response for product: {product.title} (ID: {product.id})")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error generating AI features for product {product.id}: {e}", exc_info=True)
+            return False
 

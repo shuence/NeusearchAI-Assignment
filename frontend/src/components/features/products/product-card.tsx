@@ -1,9 +1,10 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { CompareButton } from "./compare-button";
 import type { Product } from "@/types/product";
 import { ROUTES } from "@/lib/constants";
 
@@ -12,6 +13,8 @@ interface ProductCardProps {
 }
 
 export function ProductCard({ product }: ProductCardProps) {
+  const router = useRouter();
+
   const formatPrice = (price: number | null | undefined): string => {
     if (price === null || price === undefined || isNaN(price)) {
       return "Price not available";
@@ -39,12 +42,19 @@ export function ProductCard({ product }: ProductCardProps) {
     "No description available";
 
   const category =
-    product.category || product.product_type || product.vendor || "Uncategorized";
+    product.category || product.product_type || product.vendor;
+
+  const handleCardClick = () => {
+    router.push(ROUTES.PRODUCT_DETAIL(product.id));
+  };
 
   return (
-    <Card className="flex flex-col h-full hover:shadow-lg transition-shadow">
+    <Card 
+      className="flex flex-col h-full hover:shadow-lg transition-shadow cursor-pointer"
+      onClick={handleCardClick}
+    >
       <CardHeader className="shrink-0">
-        <div className="w-full overflow-hidden rounded-lg bg-muted mb-4 relative h-[200px] flex items-center justify-center">
+        <div className="w-full overflow-hidden rounded-lg bg-[#EEECEB] mb-4 relative h-[200px] flex items-center justify-center">
           <Image
             src={imageSrc}
             alt={title}
@@ -52,7 +62,9 @@ export function ProductCard({ product }: ProductCardProps) {
             height={800}
             className="object-contain w-full h-full"
             sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-            unoptimized
+            loading="lazy"
+            placeholder="blur"
+            blurDataURL="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAwIiBoZWlnaHQ9IjgwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZGRkIi8+PC9zdmc+"
             onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
               const target = e.target as HTMLImageElement;
               if (target.src !== "/placeholder.png") {
@@ -72,10 +84,23 @@ export function ProductCard({ product }: ProductCardProps) {
           {formatPrice(product.price)}
         </p>
       </CardContent>
-      <CardFooter className="shrink-0">
-        <Link href={ROUTES.PRODUCT_DETAIL(product.id)} className="w-full">
-          <Button className="w-full">View Details</Button>
-        </Link>
+      <CardFooter className="shrink-0 flex flex-col gap-2">
+        <Button 
+          className="w-full" 
+          onClick={(e) => {
+            e.stopPropagation();
+            handleCardClick();
+          }}
+          aria-label={`View details for ${title}`}
+        >
+          View Details
+        </Button>
+        <CompareButton 
+          product={product} 
+          variant="outline"
+          size="sm"
+          className="w-full"
+        />
       </CardFooter>
     </Card>
   );

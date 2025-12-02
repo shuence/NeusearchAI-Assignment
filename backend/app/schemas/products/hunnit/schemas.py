@@ -88,6 +88,7 @@ class ScrapeResponse(BaseModel):
     message: str
     count: int
     products: Optional[List[Product]] = None
+    response_time_ms: Optional[float] = None
 
 
 class DBProduct(BaseModel):
@@ -106,6 +107,7 @@ class DBProduct(BaseModel):
     tags: Optional[List[str]] = None
     image_urls: Optional[List[str]] = None
     features: Optional[dict] = None
+    ai_features: Optional[List[str]] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
     scraped_at: Optional[str] = None
@@ -128,4 +130,17 @@ class DBProduct(BaseModel):
     
     class Config:
         from_attributes = True
+
+
+class ProductListResponse(BaseModel):
+    """Response wrapper for product list with metadata."""
+    products: List[DBProduct]
+    count: int
+    response_time_ms: float
+
+
+class ProductResponse(BaseModel):
+    """Response wrapper for single product with metadata."""
+    product: DBProduct
+    response_time_ms: float
 

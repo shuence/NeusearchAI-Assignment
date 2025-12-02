@@ -85,3 +85,14 @@ class ChatResponse(BaseModel):
     needs_clarification: bool
     recommendations: Optional[List[ProductRecommendation]] = None
 
+
+class CompareRequest(BaseModel):
+    """Request for product comparison endpoint."""
+    product_ids: List[str] = Field(..., min_length=2, max_length=4, description="List of product IDs to compare (2-4 products)")
+
+
+class CompareResponse(BaseModel):
+    """Response from product comparison endpoint."""
+    insight: str = Field(..., description="AI-generated comparison insight")
+    products: List[DBProduct] = Field(..., description="List of compared products")
+

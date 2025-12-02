@@ -46,14 +46,14 @@ Neusearch/
     ├── tailwind.config.ts
     ├── tsconfig.json
     ├── package.json
-    └── yarn.lock
+    └── pnpm-lock.yaml
 ```
 
 ## Prerequisites
 
 - Python 3.9+
 - Node.js 18+ (for frontend)
-- yarn (package manager)
+- pnpm (package manager)
 
 ## Setup
 
@@ -113,7 +113,7 @@ cd frontend
 2. Install dependencies:
 
 ```bash
-yarn install
+pnpm install
 ```
 
 3. Set up environment variables:
@@ -122,6 +122,125 @@ yarn install
 cp .env.example .env.local
 # Edit .env.local with your configuration
 ```
+
+## Local Development with Docker
+
+The easiest way to set up the development environment is using Docker Compose. This will start all services (frontend, backend, PostgreSQL with pgvector, and Redis) with hot-reloading enabled.
+
+### Prerequisites
+
+- Docker and Docker Compose installed
+- `.env` file in the root directory (see Environment Variables section)
+
+### Quick Start
+
+1. **Create a `.env` file** in the root directory (if you don't have one):
+
+```bash
+# Backend Configuration
+ENVIRONMENT=development
+DATABASE_URL=postgresql://neusearch:neusearch@postgres:5432/neusearch
+REDIS_HOST=redis
+REDIS_PORT=6379
+
+# Gemini API (required for RAG features)
+GEMINI_API_KEY=your_gemini_api_key_here
+
+# Optional: Other backend settings
+SCRAPE_INTERVAL_HOURS=6
+SYNC_ON_STARTUP=true
+```
+
+2. **Start all services**:
+
+```bash
+docker-compose -f docker-compose.local.yml up
+```
+
+This will start:
+
+- **Frontend** on <http://localhost:3000> (with hot-reloading)
+- **Backend API** on <http://localhost:8000> (with auto-reload)
+- **PostgreSQL** on localhost:5433 (with pgvector extension)
+- **Redis** on localhost:6379
+
+3. **Run database migrations** (first time only):
+
+```bash
+# Execute migrations inside the backend container
+docker-compose -f docker-compose.local.yml exec backend alembic upgrade head
+```
+
+### Docker Compose Commands
+
+```bash
+# Start all services in detached mode
+docker-compose -f docker-compose.local.yml up -d
+
+# View logs from all services
+docker-compose -f docker-compose.local.yml logs -f
+
+# View logs from a specific service
+docker-compose -f docker-compose.local.yml logs -f backend
+docker-compose -f docker-compose.local.yml logs -f frontend
+
+# Stop all services
+docker-compose -f docker-compose.local.yml down
+
+# Stop and remove volumes (clean slate)
+docker-compose -f docker-compose.local.yml down -v
+
+# Rebuild services after dependency changes
+docker-compose -f docker-compose.local.yml up --build
+
+# Execute commands in a running container
+docker-compose -f docker-compose.local.yml exec backend bash
+docker-compose -f docker-compose.local.yml exec frontend sh
+```
+
+### Services Overview
+
+- **Frontend** (`neusearch-frontend-local`): Next.js development server with hot-reloading
+- **Backend** (`neusearch-backend-local`): FastAPI server with auto-reload on code changes
+- **PostgreSQL** (`neusearch-postgres-local`): Database with pgvector extension for vector search
+- **Redis** (`neusearch-redis-local`): Cache for product data
+
+### Hot Reloading
+
+Both frontend and backend support hot-reloading:
+
+- **Frontend**: Changes to files in `frontend/` will automatically trigger Next.js hot reload
+- **Backend**: Changes to Python files in `backend/` will automatically restart the FastAPI server
+
+### Database Access
+
+To connect to PostgreSQL from your host machine:
+
+```bash
+# Using psql
+psql -h localhost -p 5433 -U neusearch -d neusearch
+
+# Or using Docker
+docker-compose -f docker-compose.local.yml exec postgres psql -U neusearch -d neusearch
+```
+
+### Redis Access
+
+To access Redis CLI:
+
+```bash
+docker-compose -f docker-compose.local.yml exec redis redis-cli
+```
+
+### Troubleshooting
+
+**Port conflicts**: If ports 3000, 8000, 5433, or 6379 are already in use, you can modify the port mappings in `docker-compose.local.yml`.
+
+**Services not starting**: Check logs with `docker-compose -f docker-compose.local.yml logs` to see error messages.
+
+**Database connection issues**: Ensure the `DATABASE_URL` in your `.env` uses `postgres` as the hostname (Docker service name), not `localhost`.
+
+**Frontend can't reach backend**: The frontend uses `http://localhost:8000` for client-side requests and `http://backend:8000` for server-side requests (SSR).
 
 ## Development
 
@@ -147,18 +266,18 @@ Navigate to the frontend directory and run:
 
 ```bash
 cd frontend
-yarn dev
+pnpm dev
 ```
 
 The Next.js development server will start on `http://localhost:3000` by default.
 
 #### Available Frontend Commands
 
-- **Development server**: `yarn dev` - Starts the Next.js development server with hot reload
-- **Production build**: `yarn build` - Creates an optimized production build
-- **Start production server**: `yarn start` - Runs the production server (requires build first)
-- **Lint code**: `yarn lint` - Runs Biome linter to check for code issues
-- **Format code**: `yarn format` - Formats code using Biome formatter
+- **Development server**: `pnpm dev` - Starts the Next.js development server with hot reload
+- **Production build**: `pnpm build` - Creates an optimized production build
+- **Start production server**: `pnpm start` - Runs the production server (requires build first)
+- **Lint code**: `pnpm lint` - Runs Biome linter to check for code issues
+- **Format code**: `pnpm format` - Formats code using Biome formatter
 
 ## UI Components
 

@@ -1,11 +1,12 @@
 """Health service for system monitoring."""
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import sys
 import platform
 import os
 import time
 import psutil
 from datetime import datetime
+from sqlalchemy import text
 from app.constants import (
     HEALTH_STATUS_HEALTHY,
     HEALTH_STATUS_DEGRADED,
@@ -13,6 +14,11 @@ from app.constants import (
     DISK_THRESHOLD_PERCENT,
 )
 from app.schemas.health import HealthResponse
+from app.config.database import engine
+from app.config.redis import get_redis_client
+from app.utils.logger import get_logger
+
+logger = get_logger("health_service")
 
 
 class HealthService:
@@ -109,11 +115,16 @@ class HealthService:
         except Exception:
             pass
         
+        # Check component health
+        database_status, redis_status, embedding_status, components = self._check_components()
+        
         # Determine health status
         status = HEALTH_STATUS_HEALTHY
         if memory_percent and memory_percent > MEMORY_THRESHOLD_PERCENT:
             status = HEALTH_STATUS_DEGRADED
         if disk_percent and disk_percent > DISK_THRESHOLD_PERCENT:
+            status = HEALTH_STATUS_DEGRADED
+        if database_status != "healthy" or redis_status == "unhealthy":
             status = HEALTH_STATUS_DEGRADED
         
         return HealthResponse(
@@ -141,4 +152,62 @@ class HealthService:
             process_memory_mb=process_memory_mb,
             process_cpu_percent=process_cpu_percent,
             process_num_threads=process_num_threads,
+            database_status=database_status,
+            redis_status=redis_status,
+            embedding_service_status=embedding_status,
+            components=components,
         )
+    
+    def _check_components(self) -> tuple[str, str, str, dict]:
+        """Check health of database, Redis, and embedding service."""
+        database_status = "unknown"
+        redis_status = "unknown"
+        embedding_status = "unknown"
+        components = {}
+        
+        # Check database
+        try:
+            with engine.connect() as conn:
+                result = conn.execute(text("SELECT 1"))
+                result.fetchone()
+            database_status = "healthy"
+            components["database"] = {"status": "healthy", "message": "Connected"}
+        except Exception as e:
+            database_status = "unhealthy"
+            components["database"] = {"status": "unhealthy", "error": str(e)}
+            logger.warning(f"Database health check failed: {e}")
+        
+        # Check Redis
+        try:
+            redis_client = get_redis_client()
+            redis_client.ping()
+            redis_status = "healthy"
+            components["redis"] = {"status": "healthy", "message": "Connected"}
+        except Exception as e:
+            redis_status = "unavailable"  # Redis is optional, so unavailable not unhealthy
+            components["redis"] = {"status": "unavailable", "message": "Redis not available (optional)"}
+            logger.debug(f"Redis health check: {e}")
+        
+        # Check embedding service
+        try:
+            from app.rag import get_embedding_service
+            from app.config.settings import settings
+            
+            if settings.GEMINI_API_KEY:
+                embedding_service = get_embedding_service()
+                # Just check if service is initialized (doesn't make API call)
+                if embedding_service:
+                    embedding_status = "available"
+                    components["embedding_service"] = {"status": "available", "message": "Service initialized"}
+                else:
+                    embedding_status = "unavailable"
+                    components["embedding_service"] = {"status": "unavailable", "message": "Service not initialized"}
+            else:
+                embedding_status = "unavailable"
+                components["embedding_service"] = {"status": "unavailable", "message": "API key not configured"}
+        except Exception as e:
+            embedding_status = "unavailable"
+            components["embedding_service"] = {"status": "unavailable", "error": str(e)}
+            logger.debug(f"Embedding service health check: {e}")
+        
+        return database_status, redis_status, embedding_status, components

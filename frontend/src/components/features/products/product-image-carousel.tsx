@@ -56,6 +56,8 @@ export function ProductImageCarousel({
   const [api, setApi] = useState<CarouselApi>();
   const [current, setCurrent] = useState(0);
   const [count, setCount] = useState(0);
+  const [selectedColor, setSelectedColor] = useState<string | null>(null);
+  const [selectedSize, setSelectedSize] = useState<string | null>(null);
 
   useEffect(() => {
     if (!api) {
@@ -73,23 +75,89 @@ export function ProductImageCarousel({
 
   const selectedImage = allImages[current - 1] || allImages[0] || mainImage;
 
-  const handleVariantClick = (variant: Variant, variantIndex: number) => {
+  const scrollToImage = (imageUrl: string) => {
     if (!api) return;
     
-    if (variant.featured_image?.src) {
-      const variantImageUrl = variant.featured_image.src;
-      const imageIndex = allImages.findIndex((img) => img === variantImageUrl);
-      
-      if (imageIndex !== -1) {
-        api.scrollTo(imageIndex);
+    // Try exact match first
+    let imageIndex = allImages.findIndex((img) => {
+      const imgStr = String(img);
+      return imgStr === imageUrl || imgStr.trim() === imageUrl.trim();
+    });
+    
+    // If not found, try partial match (in case URLs are slightly different)
+    if (imageIndex === -1) {
+      imageIndex = allImages.findIndex((img) => {
+        const imgStr = String(img);
+        // Normalize URLs for comparison
+        const normalizedVariant = imageUrl.replace(/^https?:\/\//, '').split('?')[0];
+        const normalizedImg = imgStr.replace(/^https?:\/\//, '').split('?')[0];
+        return normalizedImg.includes(normalizedVariant) || normalizedVariant.includes(normalizedImg);
+      });
+    }
+    
+    // If still not found, try to match by extracting filename or key parts
+    if (imageIndex === -1) {
+      const variantUrlParts = imageUrl.split('/').pop()?.split('?')[0]?.toLowerCase();
+      imageIndex = allImages.findIndex((img) => {
+        const imgStr = String(img);
+        const imgParts = imgStr.split('/').pop()?.split('?')[0]?.toLowerCase();
+        return variantUrlParts && imgParts && variantUrlParts === imgParts;
+      });
+    }
+    
+    if (imageIndex !== -1) {
+      // Use requestAnimationFrame to ensure carousel is ready
+      requestAnimationFrame(() => {
+        try {
+          api.scrollTo(imageIndex);
+        } catch (error) {
+          // Fallback: try with a small delay
+          setTimeout(() => {
+            try {
+              api.scrollTo(imageIndex);
+            } catch (e) {
+              // Silently fail if still can't scroll
+            }
+          }, 150);
+        }
+      });
+    }
+  };
+
+  const handleColorClick = (color: string) => {
+    setSelectedColor(color);
+    
+    // If size is already selected, find exact variant
+    if (selectedSize && variants) {
+      const matchingVariant = variants.find(
+        (v) => v.option1 === color && v.option2 === selectedSize
+      );
+      if (matchingVariant?.featured_image?.src) {
+        scrollToImage(String(matchingVariant.featured_image.src));
         return;
       }
     }
     
-    if (allImages.length > 0) {
-      const imageIndex = variantIndex;
-      const targetIndex = Math.min(imageIndex, allImages.length - 1);
-      api.scrollTo(targetIndex);
+    // Otherwise, find first variant with this color and show its image
+    if (variants) {
+      const colorVariant = variants.find((v) => v.option1 === color);
+      if (colorVariant?.featured_image?.src) {
+        scrollToImage(String(colorVariant.featured_image.src));
+      }
+    }
+  };
+
+  const handleSizeClick = (size: string) => {
+    setSelectedSize(size);
+    
+    // If color is already selected, find exact variant
+    if (selectedColor && variants) {
+      const matchingVariant = variants.find(
+        (v) => v.option1 === selectedColor && v.option2 === size
+      );
+      if (matchingVariant?.featured_image?.src) {
+        scrollToImage(String(matchingVariant.featured_image.src));
+      }
     }
   };
 
@@ -99,7 +167,7 @@ export function ProductImageCarousel({
         <CarouselContent>
           {allImages.map((imageUrl, index) => (
             <CarouselItem key={index}>
-              <div className="w-full overflow-hidden rounded-lg bg-muted relative min-h-[400px] flex items-center justify-center">
+              <div className="w-full overflow-hidden rounded-lg bg-[#EEECEB] relative min-h-[400px] flex items-center justify-center">
                 <Image
                   src={imageUrl || "/placeholder.png"}
                   alt={`Product image ${index + 1}`}
@@ -107,7 +175,9 @@ export function ProductImageCarousel({
                   height={1200}
                   className="object-contain w-full h-auto max-h-[600px]"
                   sizes="(max-width: 768px) 100vw, 50vw"
-                  unoptimized
+                  loading="lazy"
+                  placeholder="blur"
+                  blurDataURL="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIwMCIgaGVpZ2h0PSIxMjAwIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9IiNkZGQiLz48L3N2Zz4="
                 />
               </div>
             </CarouselItem>
@@ -128,38 +198,88 @@ export function ProductImageCarousel({
       )}
 
       {variants && variants.length > 0 && (
-        <div className="space-y-2">
-          <h3 className="text-sm font-medium text-muted-foreground">Variants</h3>
-          <div className="flex flex-wrap gap-2">
-            {variants.map((variant, index) => {
-              const variantLabel = [
-                variant.option1,
-                variant.option2,
-                variant.option3,
-              ]
-                .filter(Boolean)
-                .join(" / ") || variant.title || `Variant ${index + 1}`;
-              
-              const isActive = variant.featured_image?.src 
-                ? selectedImage === variant.featured_image.src
-                : current === index + 1;
-              
-              return (
-                <button
-                  key={index}
-                  type="button"
-                  onClick={() => handleVariantClick(variant, index)}
-                  className={`px-4 py-2 rounded-md border transition-all cursor-pointer ${
-                    isActive
-                      ? "border-primary bg-primary/10"
-                      : "border-muted hover:border-primary/50"
-                  }`}
-                  title={`Click to view ${variantLabel}`}
-                >
-                  <span className="text-sm">{variantLabel}</span>
-                </button>
-              );
-            })}
+        <div className="space-y-3">
+          <h3 className="text-sm font-medium text-foreground">Color & Size</h3>
+          
+          {/* Colors Row */}
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">Color</p>
+            <div className="flex flex-wrap gap-2">
+              {(() => {
+                const uniqueColors = Array.from(
+                  new Set(variants.map((v) => v.option1).filter((c): c is string => Boolean(c)))
+                );
+                return uniqueColors.map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    onClick={() => handleColorClick(color)}
+                    className={`px-4 py-2 rounded-md border text-sm transition-all cursor-pointer ${
+                      selectedColor === color
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-muted hover:border-primary/50 hover:bg-primary/5"
+                    }`}
+                  >
+                    {color}
+                  </button>
+                ));
+              })()}
+            </div>
+          </div>
+
+          {/* Sizes Row */}
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">Size</p>
+            <div className="flex flex-wrap gap-2">
+              {(() => {
+                // Filter sizes based on selected color if one is selected
+                const availableSizes = selectedColor
+                  ? Array.from(
+                      new Set(
+                        variants
+                          .filter((v) => v.option1 === selectedColor)
+                          .map((v) => v.option2)
+                          .filter((s): s is string => Boolean(s))
+                      )
+                    )
+                  : Array.from(
+                      new Set(variants.map((v) => v.option2).filter((s): s is string => Boolean(s)))
+                    );
+
+                return availableSizes.map((size) => {
+                  // Check if this size is available for selected color
+                  const isAvailable = selectedColor
+                    ? variants.some(
+                        (v) =>
+                          v.option1 === selectedColor &&
+                          v.option2 === size &&
+                          v.available !== false
+                      )
+                    : variants.some(
+                        (v) => v.option2 === size && v.available !== false
+                      );
+
+                  return (
+                    <button
+                      key={size}
+                      type="button"
+                      onClick={() => handleSizeClick(size)}
+                      className={`px-3 py-1.5 rounded-md border text-sm transition-all cursor-pointer ${
+                        selectedSize === size
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : !isAvailable
+                          ? "border-muted bg-muted text-muted-foreground opacity-50 cursor-not-allowed"
+                          : "border-muted hover:border-primary/50 hover:bg-primary/5"
+                      }`}
+                      disabled={!isAvailable}
+                      title={size + (!isAvailable ? " (Out of stock)" : "")}
+                    >
+                      {size}
+                    </button>
+                  );
+                });
+              })()}
+            </div>
           </div>
         </div>
       )}

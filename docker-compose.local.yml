@@ -1,0 +1,101 @@
+services:
+  frontend:
+    image: node:20-alpine
+    container_name: neusearch-frontend-local
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+      - API_BASE_URL=http://backend:8000
+      - WATCHPACK_POLLING=true
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+      - frontend_next:/app/.next
+    working_dir: /app
+    depends_on:
+      backend:
+        condition: service_started
+    restart: unless-stopped
+    command: sh -c "corepack enable && corepack prepare pnpm@latest --activate && pnpm install && pnpm dev"
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: neusearch-backend-local
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=development
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - DATABASE_URL=postgresql://neusearch:neusearch@postgres:5432/neusearch
+    env_file:
+      - .env
+    volumes:
+      - ./backend:/app
+      - /app/venv
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: neusearch-postgres-local
+    ports:
+      - "5433:5432"  # Use 5433 on host to avoid conflict with local postgres
+    environment:
+      - POSTGRES_USER=neusearch
+      - POSTGRES_PASSWORD=neusearch
+      - POSTGRES_DB=neusearch
+    volumes:
+      - postgres_data_local:/var/lib/postgresql/data
+      - ./backend/scripts/init-pgvector.sql:/docker-entrypoint-initdb.d/init-pgvector.sql
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U neusearch -d neusearch"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: postgres -c shared_preload_libraries=vector
+
+  redis:
+    image: redis:7-alpine
+    container_name: neusearch-redis-local
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data_local:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    command: redis-server --appendonly yes --save 60 1000
+
+volumes:
+  redis_data_local:
+  postgres_data_local:
+  frontend_node_modules:
+  frontend_next:
+

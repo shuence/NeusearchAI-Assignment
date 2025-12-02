@@ -12,13 +12,25 @@ from app.config.redis import get_redis_client, close_redis
 from app.services.scheduler import start_scheduler, shutdown_scheduler
 from app.services.startup_sync import sync_products_on_startup
 from app.utils.logger import setup_logging, get_logger
+from app.utils.env_validation import validate_and_log
 from app.constants import STATUS_MESSAGE_HELLO
 from app.docs import get_scalar_html
 from app.middleware.validation import RequestValidationMiddleware, ErrorHandlingMiddleware
+from app.middleware.rate_limit import limiter, rate_limit_exceeded_handler
+from app.middleware.metrics import MetricsMiddleware
+from slowapi.errors import RateLimitExceeded
 
 # Setup logging first
 setup_logging()
 logger = get_logger(__name__)
+
+# Validate environment variables
+try:
+    validate_and_log()
+except Exception as e:
+    logger.error(f"Environment validation failed: {e}")
+    if settings.ENVIRONMENT == "production":
+        raise
 
 
 @asynccontextmanager
@@ -104,6 +116,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Initialize rate limiter with app
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+
 # Add Scalar API documentation
 @app.get("/docs", include_in_schema=False)
 async def scalar_html():
@@ -114,6 +130,9 @@ async def scalar_html():
 
 # Error handling middleware (should be first to catch all errors)
 app.add_middleware(ErrorHandlingMiddleware)
+
+# Metrics middleware (track performance)
+app.add_middleware(MetricsMiddleware)
 
 # Request validation middleware
 app.add_middleware(RequestValidationMiddleware)

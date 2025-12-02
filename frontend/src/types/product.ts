@@ -14,6 +14,7 @@ export interface ProductApiResponse {
   tags: string[];
   image_urls: string[];
   features: Record<string, unknown>;
+  ai_features?: string[];
   created_at: string;
   updated_at: string;
   scraped_at: string;
@@ -27,8 +28,7 @@ export interface Product {
   description: string;
   image: string;
   category: string;
-  features?: string[];
-  attributes?: Record<string, string>;
+  ai_features?: string[];
   imageUrl?: string;
   // Additional fields from API
   external_id?: string;
@@ -38,5 +38,6 @@ export interface Product {
   tags?: string[];
   image_urls?: string[];
   body_html?: string;
+  features?: Record<string, unknown>; // Contains variants, options, etc.
 }
 

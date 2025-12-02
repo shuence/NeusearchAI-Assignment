@@ -1,16 +1,22 @@
 """Hunnit products router for product scraping endpoints."""
+import time
 from typing import List
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from sqlalchemy.orm import Session
 from app.controller.products.hunnit.controller import HunnitController
-from app.schemas.products.hunnit.schemas import Product, ScrapeResponse, DBProduct
+from app.schemas.products.hunnit.schemas import (
+    Product, ScrapeResponse, DBProduct, ProductListResponse, ProductResponse
+)
 from app.config.database import get_db
+from app.middleware.rate_limit import limiter
 
 router = APIRouter()
 
 
 @router.get("/scrape", response_model=ScrapeResponse)
+@limiter.limit("5/hour")
 async def scrape_hunnit_products(
+    request: Request,
     save_to_db: bool = True,
     save_to_redis: bool = True,
     db: Session = Depends(get_db)
@@ -31,6 +37,7 @@ async def scrape_hunnit_products(
     Raises:
         HTTPException: If scraping fails or returns no products
     """
+    start_time = time.time()
     try:
         controller = HunnitController(db=db)
         result = await controller.scrape_all_products(
@@ -50,6 +57,9 @@ async def scrape_hunnit_products(
                 detail="No products found. The source may be unavailable or empty."
             )
         
+        # Add response time
+        response_time_ms = (time.time() - start_time) * 1000
+        result.response_time_ms = round(response_time_ms, 2)
         return result
     except HTTPException:
         raise
@@ -63,11 +73,13 @@ async def scrape_hunnit_products(
         )
 
 
-@router.get("", response_model=List[DBProduct])
+@router.get("", response_model=ProductListResponse)
+@limiter.limit("60/minute")
 async def get_all_products(
+    request: Request,
     from_db: bool = True,
     db: Session = Depends(get_db)
-) -> List[DBProduct]:
+) -> ProductListResponse:
     """
     Get all products. By default, returns products from database.
     
@@ -75,47 +87,34 @@ async def get_all_products(
         from_db: If True, get from database. If False, scrape from Hunnit.com
     
     Returns:
-        List of all products
+        ProductListResponse with all products and response time
     """
-    controller = HunnitController(db=db)
-    
-    if from_db:
-        # Get all products from database
-        db_products = controller.get_all_products_from_db()
-        return [DBProduct.model_validate(product) for product in db_products]
-    else:
-        # Scrape from Hunnit.com (legacy behavior)
-        response = await controller.scrape_all_products(save_to_db=False)
-        if not response.success or response.products is None:
-            raise HTTPException(
-                status_code=500,
-                detail=response.message
-            )
-        # Convert scraped products to DBProduct format (simplified)
-        return [
-            DBProduct(
-                id=str(p.id),
-                external_id=str(p.id),
-                title=p.title,
-                handle=p.handle,
-                description=p.body_html[:500] if p.body_html else None,
-                body_html=p.body_html,
-                vendor=p.vendor,
-                product_type=p.product_type,
-                category=p.product_type,
-                tags=p.tags,
-                image_urls=[str(img.src) for img in p.images] if p.images else None,
-            )
-            for p in response.products
-        ]
+    start_time = time.time()
+    try:
+        controller = HunnitController(db=db)
+        products = await controller.get_all_products_as_db_products(from_db=from_db)
+        response_time_ms = (time.time() - start_time) * 1000
+        return ProductListResponse(
+            products=products,
+            count=len(products),
+            response_time_ms=round(response_time_ms, 2)
+        )
+    except Exception as e:
+        from app.utils.logger import get_logger
+        logger = get_logger("hunnit_router")
+        logger.error(f"Error in get_all_products endpoint: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="An error occurred while fetching products. Please try again later."
+        )
 
 
-@router.get("/{product_id}", response_model=DBProduct)
+@router.get("/{product_id}", response_model=ProductResponse)
 async def get_product(
     product_id: str,
     from_db: bool = True,
     db: Session = Depends(get_db)
-) -> DBProduct:
+) -> ProductResponse:
     """
     Get a specific product by ID. By default, searches in database first.
     
@@ -124,65 +123,50 @@ async def get_product(
         from_db: If True, search in database. If False, scrape from Hunnit.com
         
     Returns:
-        Product object
+        ProductResponse with product and response time
         
     Raises:
         HTTPException: If product not found
     """
-    controller = HunnitController(db=db)
-    
-    if from_db:
-        # Try to get from database by UUID first
-        product = controller.get_product_from_db_by_id(product_id)
-        if product:
-            return DBProduct.model_validate(product)
+    start_time = time.time()
+    try:
+        controller = HunnitController(db=db)
+        product = await controller.get_product_as_db_product(product_id, from_db=from_db)
         
-        # Try by external_id
-        product = controller.get_product_from_db_by_external_id(product_id)
-        if product:
-            return DBProduct.model_validate(product)
-        
-        raise HTTPException(
-            status_code=404,
-            detail=f"Product with ID {product_id} not found in database"
-        )
-    else:
-        # Legacy: scrape from Hunnit.com
-        try:
-            external_id_int = int(product_id)
-            product = await controller.get_product_by_id(external_id_int)
-            if product is None:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"Product with ID {product_id} not found"
-                )
-            # Convert to DBProduct format
-            return DBProduct(
-                id=str(product.id),
-                external_id=str(product.id),
-                title=product.title,
-                handle=product.handle,
-                description=product.body_html[:500] if product.body_html else None,
-                body_html=product.body_html,
-                vendor=product.vendor,
-                product_type=product.product_type,
-                category=product.product_type,
-                tags=product.tags,
-                image_urls=[str(img.src) for img in product.images] if product.images else None,
-            )
-        except ValueError:
+        if product is None:
             raise HTTPException(
-                status_code=400,
-                detail=f"Invalid product ID format: {product_id}"
+                status_code=404,
+                detail=f"Product with ID {product_id} not found"
             )
+        
+        response_time_ms = (time.time() - start_time) * 1000
+        return ProductResponse(
+            product=product,
+            response_time_ms=round(response_time_ms, 2)
+        )
+    except HTTPException:
+        raise
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid product ID format: {product_id}"
+        )
+    except Exception as e:
+        from app.utils.logger import get_logger
+        logger = get_logger("hunnit_router")
+        logger.error(f"Error in get_product endpoint: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="An error occurred while fetching the product. Please try again later."
+        )
 
 
-@router.get("/tag/{tag}", response_model=List[DBProduct])
+@router.get("/tag/{tag}", response_model=ProductListResponse)
 async def get_products_by_tag(
     tag: str,
     from_db: bool = True,
     db: Session = Depends(get_db)
-) -> List[DBProduct]:
+) -> ProductListResponse:
     """
     Get products filtered by tag. By default, searches in database.
     
@@ -191,39 +175,34 @@ async def get_products_by_tag(
         from_db: If True, search in database. If False, scrape from Hunnit.com
         
     Returns:
-        List of products matching the tag
+        ProductListResponse with products matching the tag and response time
     """
-    controller = HunnitController(db=db)
-    
-    if from_db:
-        db_products = controller.get_products_from_db_by_tag(tag)
-        return [DBProduct.model_validate(product) for product in db_products]
-    else:
-        products = await controller.get_products_by_tag(tag)
-        return [
-            DBProduct(
-                id=str(p.id),
-                external_id=str(p.id),
-                title=p.title,
-                handle=p.handle,
-                description=p.body_html[:500] if p.body_html else None,
-                body_html=p.body_html,
-                vendor=p.vendor,
-                product_type=p.product_type,
-                category=p.product_type,
-                tags=p.tags,
-                image_urls=[str(img.src) for img in p.images] if p.images else None,
-            )
-            for p in products
-        ]
+    start_time = time.time()
+    try:
+        controller = HunnitController(db=db)
+        products = await controller.get_products_by_tag_as_db_products(tag, from_db=from_db)
+        response_time_ms = (time.time() - start_time) * 1000
+        return ProductListResponse(
+            products=products,
+            count=len(products),
+            response_time_ms=round(response_time_ms, 2)
+        )
+    except Exception as e:
+        from app.utils.logger import get_logger
+        logger = get_logger("hunnit_router")
+        logger.error(f"Error in get_products_by_tag endpoint: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="An error occurred while fetching products. Please try again later."
+        )
 
 
-@router.get("/vendor/{vendor}", response_model=List[DBProduct])
+@router.get("/vendor/{vendor}", response_model=ProductListResponse)
 async def get_products_by_vendor(
     vendor: str,
     from_db: bool = True,
     db: Session = Depends(get_db)
-) -> List[DBProduct]:
+) -> ProductListResponse:
     """
     Get products filtered by vendor. By default, searches in database.
     
@@ -232,31 +211,26 @@ async def get_products_by_vendor(
         from_db: If True, search in database. If False, scrape from Hunnit.com
         
     Returns:
-        List of products from the specified vendor
+        ProductListResponse with products from the specified vendor and response time
     """
-    controller = HunnitController(db=db)
-    
-    if from_db:
-        db_products = controller.get_products_from_db_by_vendor(vendor)
-        return [DBProduct.model_validate(product) for product in db_products]
-    else:
-        products = await controller.get_products_by_vendor(vendor)
-        return [
-            DBProduct(
-                id=str(p.id),
-                external_id=str(p.id),
-                title=p.title,
-                handle=p.handle,
-                description=p.body_html[:500] if p.body_html else None,
-                body_html=p.body_html,
-                vendor=p.vendor,
-                product_type=p.product_type,
-                category=p.product_type,
-                tags=p.tags,
-                image_urls=[str(img.src) for img in p.images] if p.images else None,
-            )
-            for p in products
-        ]
+    start_time = time.time()
+    try:
+        controller = HunnitController(db=db)
+        products = await controller.get_products_by_vendor_as_db_products(vendor, from_db=from_db)
+        response_time_ms = (time.time() - start_time) * 1000
+        return ProductListResponse(
+            products=products,
+            count=len(products),
+            response_time_ms=round(response_time_ms, 2)
+        )
+    except Exception as e:
+        from app.utils.logger import get_logger
+        logger = get_logger("hunnit_router")
+        logger.error(f"Error in get_products_by_vendor endpoint: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="An error occurred while fetching products. Please try again later."
+        )
 
 
 @router.get("/stats/count", response_model=dict)
@@ -265,11 +239,65 @@ async def get_product_count(db: Session = Depends(get_db)) -> dict:
     Get total number of products in the database.
     
     Returns:
-        Dictionary with product count
+        Dictionary with product count and response time
     """
-    controller = HunnitController(db=db)
-    count = controller.get_product_count_from_db()
-    return {"count": count, "source": "database"}
+    start_time = time.time()
+    try:
+        controller = HunnitController(db=db)
+        count = controller.get_product_count_from_db()
+        response_time_ms = (time.time() - start_time) * 1000
+        return {
+            "count": count,
+            "source": "database",
+            "response_time_ms": round(response_time_ms, 2)
+        }
+    except Exception as e:
+        from app.utils.logger import get_logger
+        logger = get_logger("hunnit_router")
+        logger.error(f"Error in get_product_count endpoint: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="An error occurred while fetching product count. Please try again later."
+        )
+
+
+@router.get("/{product_id}/similar", response_model=ProductListResponse)
+async def get_similar_products(
+    product_id: str,
+    limit: int = 4,
+    db: Session = Depends(get_db)
+) -> ProductListResponse:
+    """
+    Get similar products using vector search.
+    
+    Args:
+        product_id: The ID of the product to find similar products for
+        limit: Maximum number of similar products to return (default: 4)
+        db: Database session
+    
+    Returns:
+        ProductListResponse with similar products and response time
+    """
+    start_time = time.time()
+    try:
+        controller = HunnitController(db=db)
+        similar_products = controller.get_similar_products_as_db_products(product_id, limit=limit)
+        response_time_ms = (time.time() - start_time) * 1000
+        return ProductListResponse(
+            products=similar_products,
+            count=len(similar_products),
+            response_time_ms=round(response_time_ms, 2)
+        )
+    except Exception as e:
+        from app.utils.logger import get_logger
+        logger = get_logger("hunnit_router")
+        logger.error(f"Error getting similar products: {e}", exc_info=True)
+        response_time_ms = (time.time() - start_time) * 1000
+        return ProductListResponse(
+            products=[],
+            count=0,
+            response_time_ms=round(response_time_ms, 2)
+        )
 
 
 @router.get("/cache/status", response_model=dict)
@@ -278,25 +306,24 @@ async def get_cache_status() -> dict:
     Get Redis cache status and metadata.
     
     Returns:
-        Dictionary with cache status information
+        Dictionary with cache status information and response time
     """
-    from app.services.products.hunnit.redis_service import HunnitProductRedisService
-    
+    start_time = time.time()
     try:
-        redis_service = HunnitProductRedisService()
-        count = redis_service.get_products_count()
-        timestamp_info = redis_service.get_scrape_timestamp()
-        
-        return {
-            "cache_available": True,
-            "products_cached": count,
-            "last_scrape": timestamp_info,
-            "status": "active" if count else "empty"
-        }
+        controller = HunnitController()
+        status = controller.get_cache_status()
+        response_time_ms = (time.time() - start_time) * 1000
+        status["response_time_ms"] = round(response_time_ms, 2)
+        return status
     except Exception as e:
+        from app.utils.logger import get_logger
+        logger = get_logger("hunnit_router")
+        logger.error(f"Error getting cache status: {e}", exc_info=True)
+        response_time_ms = (time.time() - start_time) * 1000
         return {
             "cache_available": False,
             "error": str(e),
-            "status": "unavailable"
+            "status": "unavailable",
+            "response_time_ms": round(response_time_ms, 2)
         }
 

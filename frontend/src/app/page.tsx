@@ -1,15 +1,30 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Header } from "@/components/layout/header";
+import { Footer } from "@/components/layout/footer";
+import { FloatingChatWidget } from "@/components/features/chat/floating-chat-widget";
 import { ProductGrid } from "@/components/features/products/product-grid";
+import { ProductGridSkeleton } from "@/components/features/products/product-grid-skeleton";
+import { ProductFilters, type FilterState } from "@/components/features/products/product-filters";
 import { getProducts } from "@/lib/api/products";
+import { filterAndSortProducts } from "@/lib/utils/filter-products";
 import type { Product } from "@/types/product";
 import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
+
+const initialFilterState: FilterState = {
+  searchQuery: "",
+  selectedCategory: null,
+  selectedVendor: null,
+  priceRange: null,
+  sortBy: "none",
+};
 
 export default function Home() {
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [filterState, setFilterState] = useState<FilterState>(initialFilterState);
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -17,8 +32,16 @@ export default function Home() {
         setIsLoading(true);
         const data = await getProducts();
         setProducts(data);
+        if (data.length === 0) {
+          toast.info("No products found", {
+            description: "The product catalog is currently empty.",
+          });
+        }
       } catch (error) {
         console.error("Error loading products:", error);
+        toast.error("Failed to load products", {
+          description: error instanceof Error ? error.message : "Please try again later.",
+        });
       } finally {
         setIsLoading(false);
       }
@@ -27,11 +50,17 @@ export default function Home() {
     fetchProducts();
   }, []);
 
+  // Filter and sort products based on filter state
+  const filteredProducts = useMemo(() => {
+    if (products.length === 0) return [];
+    return filterAndSortProducts(products, filterState);
+  }, [products, filterState]);
+
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background flex flex-col">
       <Header />
 
-      <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto px-4 py-8 flex-1">
         <div className="mb-8">
           <h2 className="text-3xl font-bold mb-2">All Products</h2>
           <p className="text-muted-foreground">
@@ -40,10 +69,15 @@ export default function Home() {
         </div>
 
         {isLoading ? (
-          <div className="text-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
-            <p className="text-muted-foreground">Loading products...</p>
-          </div>
+          <>
+            <ProductFilters
+              products={[]}
+              filteredProducts={[]}
+              filterState={filterState}
+              onFilterChange={setFilterState}
+            />
+            <ProductGridSkeleton count={6} />
+          </>
         ) : products.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-muted-foreground mb-4">
@@ -54,9 +88,30 @@ export default function Home() {
             </p>
           </div>
         ) : (
-          <ProductGrid products={products} />
+          <>
+            <ProductFilters
+              products={products}
+              filteredProducts={filteredProducts}
+              filterState={filterState}
+              onFilterChange={setFilterState}
+            />
+            {filteredProducts.length === 0 ? (
+              <div className="text-center py-12">
+                <p className="text-muted-foreground mb-4">
+                  No products match your filters.
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Try adjusting your search or filter criteria.
+                </p>
+              </div>
+            ) : (
+              <ProductGrid products={filteredProducts} />
+            )}
+          </>
         )}
       </main>
+      <Footer />
+      <FloatingChatWidget />
     </div>
   );
 }
