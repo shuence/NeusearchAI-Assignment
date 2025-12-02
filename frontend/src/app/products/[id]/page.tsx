@@ -1,4 +1,7 @@
-import { notFound } from "next/navigation";
+"use client";
+
+import { useState, useEffect } from "react";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Header } from "@/components/layout/header";
 import { Button } from "@/components/ui/button";
@@ -6,20 +9,55 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ProductImageCarousel } from "@/components/features/products/product-image-carousel";
 import { getProductById } from "@/lib/api/products";
 import { ROUTES } from "@/lib/constants";
+import type { Product } from "@/types/product";
+import { Loader2 } from "lucide-react";
 
-interface ProductDetailPageProps {
-  params: Promise<{ id: string }>;
-}
+export default function ProductDetailPage() {
+  const params = useParams();
+  const router = useRouter();
+  const id = params.id as string;
+  const [product, setProduct] = useState<Product | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-export default async function ProductDetailPage({
-  params,
-}: ProductDetailPageProps) {
-  const { id } = await params;
+  useEffect(() => {
+    const fetchProduct = async () => {
+      try {
+        setIsLoading(true);
+        const data = await getProductById(id);
+        if (!data) {
+          router.push("/not-found");
+          return;
+        }
+        setProduct(data);
+      } catch (error) {
+        console.error("Error loading product:", error);
+        router.push("/not-found");
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-  const product = await getProductById(id, true);
+    if (id) {
+      fetchProduct();
+    }
+  }, [id, router]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <main className="container mx-auto px-4 py-8">
+          <div className="text-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
+            <p className="text-muted-foreground">Loading product...</p>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   if (!product) {
-    notFound();
+    return null;
   }
 
   let variants: Array<{

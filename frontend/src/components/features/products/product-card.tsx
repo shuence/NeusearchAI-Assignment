@@ -53,7 +53,7 @@ export function ProductCard({ product }: ProductCardProps) {
             className="object-contain w-full h-full"
             sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
             unoptimized
-            onError={(e: { target: HTMLImageElement; }) => {
+            onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
               const target = e.target as HTMLImageElement;
               if (target.src !== "/placeholder.png") {
                 target.src = "/placeholder.png";
