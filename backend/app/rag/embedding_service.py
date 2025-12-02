@@ -23,7 +23,7 @@ class EmbeddingService:
     
     def _prepare_product_text(self, product_data: dict) -> str:
         """
-        Prepare a text representation of a product for embedding.
+        Prepare a structured text representation with importance weighting for embedding.
         
         Args:
             product_data: Dictionary containing product fields
@@ -31,44 +31,60 @@ class EmbeddingService:
         Returns:
             Combined text string for embedding
         """
+        import re
         parts = []
         
-        # Add title (most important)
+        # High importance fields (repeat title for emphasis)
         if product_data.get("title"):
-            parts.append(f"Title: {product_data['title']}")
+            title = product_data['title']
+            parts.append(f"Product: {title}")
+            parts.append(f"Title: {title}")  # Repeat for emphasis
         
-        # Add description
+        # Medium importance - description
         if product_data.get("description"):
-            parts.append(f"Description: {product_data['description']}")
+            desc = product_data['description']
+            # Truncate very long descriptions to focus on key info
+            if len(desc) > 500:
+                desc = desc[:500] + "..."
+            parts.append(f"Description: {desc}")
         
-        # Add body_html if description is not available or is short
-        if product_data.get("body_html") and (
-            not product_data.get("description") or 
-            len(product_data.get("description", "")) < 100
-        ):
-            # Simple HTML tag removal
-            import re
+        if product_data.get("body_html"):
             body_text = re.sub(r'<[^>]+>', '', product_data['body_html']).strip()
-            if body_text:
-                parts.append(f"Details: {body_text[:500]}")  # Limit length
+            sentences = re.split(r'[.!?]\s+', body_text)
+            key_sentences = [s.strip() for s in sentences[:3] if len(s.strip()) > 20]
+            if key_sentences:
+                parts.append(f"Features: {' '.join(key_sentences)}")
         
-        # Add vendor
+        # Categorical information
+        category_parts = []
+        if product_data.get("product_type"):
+            category_parts.append(product_data['product_type'])
+        if product_data.get("category"):
+            category_parts.append(product_data['category'])
+        if category_parts:
+            parts.append(f"Category: {', '.join(category_parts)}")
+        
+        # Brand/Vendor (add as both brand and manufacturer for synonym matching)
         if product_data.get("vendor"):
             parts.append(f"Brand: {product_data['vendor']}")
+            parts.append(f"Manufacturer: {product_data['vendor']}")
         
-        # Add product type/category
-        if product_data.get("product_type"):
-            parts.append(f"Category: {product_data['product_type']}")
-        
-        # Add tags
         if product_data.get("tags") and isinstance(product_data["tags"], list):
-            tags_str = ", ".join(product_data["tags"])
-            if tags_str:
+            tags = product_data["tags"]
+            if tags:
+                tags_str = ", ".join(tags)
                 parts.append(f"Tags: {tags_str}")
+                parts.append(f"Keywords: {tags_str}")
         
-        # Add price information
         if product_data.get("price"):
-            parts.append(f"Price: ${product_data['price']}")
+            price = product_data['price']
+            if price < 50:
+                price_range = "budget affordable"
+            elif price < 150:
+                price_range = "mid-range moderate"
+            else:
+                price_range = "premium luxury"
+            parts.append(f"Price range: {price_range}")
         
         return " | ".join(parts)
     
@@ -212,7 +228,6 @@ def get_embedding_service() -> EmbeddingService:
     global _embedding_service, _embedding_service_error
     
     if _embedding_service_error is not None:
-        # Re-raise the previous error
         raise _embedding_service_error
     
     if _embedding_service is None:

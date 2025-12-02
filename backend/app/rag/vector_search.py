@@ -100,7 +100,8 @@ class VectorSearchService:
         self,
         query_text: str,
         limit: int = 5,
-        similarity_threshold: float = 0.7
+        similarity_threshold: float = 0.7,
+        enhance_query: bool = True
     ) -> List[Tuple[Product, float]]:
         """
         Search for products by converting query text to embedding first.
@@ -109,6 +110,7 @@ class VectorSearchService:
             query_text: Natural language query
             limit: Maximum number of results to return
             similarity_threshold: Minimum cosine similarity score (0-1)
+            enhance_query: Whether to enhance query with synonyms and normalization
         
         Returns:
             List of tuples (Product, similarity_score) sorted by similarity
@@ -117,9 +119,19 @@ class VectorSearchService:
             logger.error("Embedding service not available for query text search")
             return []
         
-        # Generate embedding for query text
+        # Enhance query if enabled
+        final_query = query_text
+        if enhance_query:
+            try:
+                from app.rag.query_enhancement import QueryEnhancer
+                enhancer = QueryEnhancer()
+                final_query = enhancer.enhance(query_text)
+            except Exception as e:
+                logger.warning(f"Query enhancement failed: {e}, using original query")
+                final_query = query_text
+        
         query_embedding = self.embedding_service.generate_embedding(
-            query_text,
+            final_query,
             task_type="RETRIEVAL_QUERY"
         )
         

@@ -49,14 +49,42 @@ Product {i}:
         
         return "\n".join(context_parts)
     
+    def _calculate_metadata_context(self, products: List[Product]) -> str:
+        """Calculate metadata context for products (price range, categories, etc.)."""
+        if not products:
+            return ""
+        
+        # Calculate average price
+        prices = [p.price for p in products if p.price]
+        avg_price = sum(prices) / len(prices) if prices else 0
+        
+        # Find common category
+        categories = [p.product_type for p in products if p.product_type]
+        common_category = max(set(categories), key=categories.count) if categories else None
+        
+        context_parts = []
+        if common_category:
+            context_parts.append(f"Most products are in the {common_category} category.")
+        if avg_price > 0:
+            if avg_price < 50:
+                price_range = "budget-friendly"
+            elif avg_price < 150:
+                price_range = "mid-range"
+            else:
+                price_range = "premium"
+            context_parts.append(f"Products are in the {price_range} price range (average ${avg_price:.0f}).")
+        
+        return " ".join(context_parts)
+    
     def _build_prompt(
         self,
         user_query: str,
         products: List[Product],
         conversation_history: Optional[List[Dict[str, str]]] = None
     ) -> str:
-        """Build the prompt for the LLM."""
+        """Build improved prompt for the LLM with better context."""
         product_context = self._format_product_context(products)
+        metadata_context = self._calculate_metadata_context(products)
         
         system_prompt = """You are a helpful product recommendation assistant for an e-commerce website. 
 Your role is to help users find products that match their needs based on their queries.
@@ -71,23 +99,34 @@ IMPORTANT GUIDELINES:
 7. If no products match well, politely explain why and suggest what might help
 8. Keep responses concise but informative (2-3 sentences)
 9. Focus on explaining the match between the query and the products, not listing them
+10. Consider price range, style, use case, and category when explaining matches
+
+EXAMPLES OF GOOD RESPONSES:
+- "I found some great options that work well for both gym workouts and professional meetings. These pieces combine athletic functionality with a polished look that transitions seamlessly from exercise to office."
+- "These products match your search for casual everyday wear. They're comfortable, versatile pieces that work well for various occasions."
+- "I found some options, but could you tell me more about the specific style you're looking for? Are you interested in something more formal or casual?"
 
 Product Context:
 """
         
         user_prompt = f"""
 User Query: {user_query}
-
+"""
+        
+        if metadata_context:
+            user_prompt += f"\nContext: {metadata_context}\n"
+        
+        user_prompt += """
 Based on the above products, please:
 1. Interpret what the user is looking for
 2. If needed, ask ONE clarifying question to better understand their needs
 3. Provide a conversational response explaining why these products match (DO NOT list product names)
 4. If the query is clear and products match well, explain the match directly
+5. Consider the price range, category, and use cases when explaining relevance
 
 Remember: DO NOT include product names or create lists. Just provide a natural conversational response explaining the match.
 """
         
-        # Add conversation history if provided
         if conversation_history:
             history_text = "\n".join([
                 f"{'User' if msg['role'] == 'user' else 'Assistant'}: {msg['content']}"
@@ -97,12 +136,33 @@ Remember: DO NOT include product names or create lists. Just provide a natural c
         
         return system_prompt + product_context + "\n\n" + user_prompt
     
+    def _calculate_optimal_threshold(self, query: str, initial_result_count: int = 0) -> float:
+        """Calculate optimal similarity threshold based on query characteristics."""
+        base_threshold = 0.6
+        
+        # Lower threshold for short queries (less specific)
+        query_words = len(query.split())
+        if query_words <= 2:
+            base_threshold -= 0.1
+        
+        # Lower threshold if we got few results (need more recall)
+        if initial_result_count < 3:
+            base_threshold -= 0.15
+        
+        # Higher threshold for very specific queries
+        if query_words > 5:
+            base_threshold += 0.05
+        
+        # Ensure threshold is within reasonable bounds
+        return max(0.3, min(0.9, base_threshold))
+    
     def recommend_products(
         self,
         user_query: str,
         max_results: int = 5,
         similarity_threshold: float = 0.6,
-        conversation_history: Optional[List[Dict[str, str]]] = None
+        conversation_history: Optional[List[Dict[str, str]]] = None,
+        auto_adjust_threshold: bool = True
     ) -> Dict[str, Any]:
         """
         Recommend products based on user query using RAG.
@@ -120,14 +180,32 @@ Remember: DO NOT include product names or create lists. Just provide a natural c
             - needs_clarification: Whether the LLM is asking for clarification
         """
         try:
-            # Step 1: Vector search to find similar products
+            if auto_adjust_threshold:
+                adjusted_threshold = self._calculate_optimal_threshold(user_query)
+                if adjusted_threshold != similarity_threshold:
+                    logger.info(f"Adjusted similarity threshold: {similarity_threshold} -> {adjusted_threshold}")
+                    similarity_threshold = adjusted_threshold
+            
             logger.info(f"Searching for products matching query: {user_query}")
             search_results = self.vector_search.search_by_query_text(
                 query_text=user_query,
-                limit=max_results,
-                similarity_threshold=similarity_threshold
+                limit=max_results * 2,
+                similarity_threshold=similarity_threshold,
+                enhance_query=True  # Enable query enhancement
             )
             
+            # If we got too few results, try with lower threshold
+            if len(search_results) < max_results and similarity_threshold > 0.3:
+                logger.info(f"Got {len(search_results)} results, trying with lower threshold")
+                search_results = self.vector_search.search_by_query_text(
+                    query_text=user_query,
+                    limit=max_results * 2,
+                    similarity_threshold=max(0.3, similarity_threshold - 0.2),
+                    enhance_query=True
+                )
+            
+            # Limit to max_results
+            search_results = search_results[:max_results]
             products = [product for product, score in search_results]
             
             if not products:
@@ -139,7 +217,6 @@ Remember: DO NOT include product names or create lists. Just provide a natural c
                     "scores": []
                 }
             
-            # Step 2: Use LLM to interpret query and generate response
             if not self.llm_client:
                 # Fallback: return products without LLM interpretation
                 logger.warning("LLM not available - returning products without interpretation")
@@ -153,7 +230,6 @@ Remember: DO NOT include product names or create lists. Just provide a natural c
             # Build prompt
             prompt = self._build_prompt(user_query, products, conversation_history)
             
-            # Generate LLM response
             logger.info("Generating LLM response...")
             response = self.llm_client.models.generate_content(
                 model=self.llm_model,
@@ -162,14 +238,10 @@ Remember: DO NOT include product names or create lists. Just provide a natural c
             
             llm_response = response.text if hasattr(response, 'text') else str(response)
             
-            # Clean up response - remove product names and bullet points if LLM included them
-            # This is a safety measure in case the LLM doesn't follow instructions
-            # Remove common patterns like "Product Name:" or bullet points with product names
             cleaned_response = re.sub(r'^\s*[-*•]\s*.*?:\s*.*$', '', llm_response, flags=re.MULTILINE)
-            cleaned_response = re.sub(r'\*\*.*?\*\*:', '', cleaned_response)  # Remove bold product names
+            cleaned_response = re.sub(r'\*\*.*?\*\*:', '', cleaned_response)
             cleaned_response = re.sub(r'^.*?Sports Bra.*?:.*$', '', cleaned_response, flags=re.MULTILINE | re.IGNORECASE)
             cleaned_response = re.sub(r'^.*?Top.*?:.*$', '', cleaned_response, flags=re.MULTILINE | re.IGNORECASE)
-            # Clean up multiple newlines
             cleaned_response = re.sub(r'\n{3,}', '\n\n', cleaned_response)
             cleaned_response = cleaned_response.strip()
             
@@ -177,7 +249,6 @@ Remember: DO NOT include product names or create lists. Just provide a natural c
             if not cleaned_response:
                 cleaned_response = llm_response.strip()
             
-            # Check if response is asking for clarification
             clarification_keywords = [
                 "could you clarify",
                 "can you tell me more",
@@ -191,11 +262,9 @@ Remember: DO NOT include product names or create lists. Just provide a natural c
                 for keyword in clarification_keywords
             ) and "?" in cleaned_response
             
-            # Always return products - even if asking for clarification, show what we found
-            # The frontend will display them as cards
             return {
                 "response": cleaned_response,
-                "products": products,  # Always return products to display as cards
+                "products": products,
                 "needs_clarification": needs_clarification,
                 "scores": [score for _, score in search_results]
             }

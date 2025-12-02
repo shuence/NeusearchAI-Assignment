@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import Image from "next/image";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,7 +12,6 @@ interface ProductCardProps {
 }
 
 export function ProductCard({ product }: ProductCardProps) {
-  // Format price with proper handling of edge cases
   const formatPrice = (price: number | null | undefined): string => {
     if (price === null || price === undefined || isNaN(price)) {
       return "Price not available";
@@ -21,36 +22,22 @@ export function ProductCard({ product }: ProductCardProps) {
     if (price === 0) {
       return "Free";
     }
-    // Handle very large numbers
-    if (price >= 10000000) {
-      return `₹${(price / 10000000).toFixed(1)}Cr`;
-    }
-    if (price >= 100000) {
-      return `₹${(price / 100000).toFixed(1)}L`;
-    }
-    if (price >= 1000) {
-      return `₹${(price / 1000).toFixed(1)}K`;
-    }
     return `₹${Math.round(price).toLocaleString("en-IN")}`;
   };
 
-  // Get image source with fallback
   const imageSrc =
     product.image ||
     product.imageUrl ||
     product.image_urls?.[0] ||
     "/placeholder.png";
 
-  // Get title with fallback
   const title = product.title || "Untitled Product";
 
-  // Get description with fallback
   const description =
     product.description ||
     product.body_html?.replace(/<[^>]*>/g, "").substring(0, 100) ||
     "No description available";
 
-  // Get category with fallback
   const category =
     product.category || product.product_type || product.vendor || "Uncategorized";
 
@@ -66,8 +53,7 @@ export function ProductCard({ product }: ProductCardProps) {
             className="object-contain w-full h-full"
             sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
             unoptimized
-            onError={(e) => {
-              // Fallback to placeholder on error
+            onError={(e: { target: HTMLImageElement; }) => {
               const target = e.target as HTMLImageElement;
               if (target.src !== "/placeholder.png") {
                 target.src = "/placeholder.png";

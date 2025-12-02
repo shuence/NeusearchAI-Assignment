@@ -29,14 +29,30 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Create .env file
+        run: |
+          # Always create .env file (will be empty if secret is not set)
+          echo "${{ secrets.ENV_FILE }}" > .env
+          # Verify file was created
+          if [ ! -f .env ]; then
+            echo "Error: Failed to create .env file"
+            exit 1
+          fi
+          echo "✓ .env file created"
+
+      - name: Set image name
+        run: |
+          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "IMAGE_NAME=ghcr.io/${REPO_LOWER}:latest" >> $GITHUB_ENV
+
       - name: Build Docker image
         run: |
           docker build \
             --build-arg ENVIRONMENT=${{env.ENVIRONMENT }} \
             --build-arg API_PREFIX=${{ env.API_PREFIX }} \
-            -t ghcr.io/${{ github.repository_owner }}/fastapi-app:latest .
+            -t ${{ env.IMAGE_NAME }} .
 
       - name: Push image
         run: |
-          docker push ghcr.io/${{ github.repository_owner }}/fastapi-app:latest
+          docker push ${{ env.IMAGE_NAME }}
 

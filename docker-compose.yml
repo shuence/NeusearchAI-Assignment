@@ -1,7 +1,7 @@
 services:
   backend:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile
     container_name: neusearch-backend
     ports:
@@ -32,7 +32,7 @@ services:
     image: pgvector/pgvector:pg16
     container_name: neusearch-postgres
     ports:
-      - "5432:5432"
+      - "5433:5432"  # Use 5433 on host to avoid conflict with local postgres
     environment:
       - POSTGRES_USER=neusearch
       - POSTGRES_PASSWORD=neusearch

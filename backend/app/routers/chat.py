@@ -31,11 +31,32 @@ async def chat(
         ChatResponse with LLM-generated response and recommended products
     """
     try:
+        # Validation is handled by Pydantic, but add extra safety checks
         if not request.message or not request.message.strip():
             raise HTTPException(
                 status_code=400,
                 detail="Message cannot be empty"
             )
+        
+        # Validate conversation history if provided
+        if request.conversation_history:
+            if len(request.conversation_history) > 50:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Conversation history is too long (max 50 messages)"
+                )
+            # Validate each message structure
+            for i, msg in enumerate(request.conversation_history):
+                if not isinstance(msg, dict):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Invalid message format at index {i}: must be a dictionary"
+                    )
+                if "role" not in msg or "content" not in msg:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Invalid message at index {i}: missing 'role' or 'content' field"
+                    )
         
         # Initialize RAG service
         rag_service = RAGService(db)
@@ -48,37 +69,62 @@ async def chat(
             conversation_history=request.conversation_history
         )
         
-        # Convert products to DBProduct schema
-        db_products = [
-            DBProduct.model_validate(product) 
-            for product in result["products"]
-        ]
+        # Validate result structure
+        if not isinstance(result, dict):
+            logger.error("RAG service returned invalid result format")
+            raise HTTPException(
+                status_code=500,
+                detail="Invalid response from recommendation service"
+            )
+        
+        # Convert products to DBProduct schema with error handling
+        db_products = []
+        for product in result.get("products", []):
+            try:
+                db_products.append(DBProduct.model_validate(product))
+            except Exception as e:
+                logger.warning(f"Failed to validate product: {e}")
+                continue
         
         # Create recommendations with scores
         recommendations = None
-        if result["products"] and result["scores"]:
-            recommendations = [
-                ProductRecommendation(
-                    product=DBProduct.model_validate(product),
-                    similarity_score=score
-                )
-                for product, score in zip(result["products"], result["scores"])
-            ]
+        products = result.get("products", [])
+        scores = result.get("scores", [])
+        
+        if products and scores and len(products) == len(scores):
+            try:
+                recommendations = [
+                    ProductRecommendation(
+                        product=DBProduct.model_validate(product),
+                        similarity_score=score
+                    )
+                    for product, score in zip(products, scores)
+                ]
+            except Exception as e:
+                logger.warning(f"Failed to create recommendations: {e}")
+                # Continue without recommendations
         
         return ChatResponse(
-            response=result["response"],
+            response=result.get("response", "I'm sorry, I couldn't process your request."),
             products=db_products,
-            needs_clarification=result["needs_clarification"],
+            needs_clarification=result.get("needs_clarification", False),
             recommendations=recommendations
         )
         
     except HTTPException:
         raise
+    except ValueError as e:
+        # Handle validation errors
+        logger.warning(f"Validation error in chat endpoint: {e}")
+        raise HTTPException(
+            status_code=400,
+            detail=str(e)
+        )
     except Exception as e:
         logger.error(f"Error in chat endpoint: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Internal server error: {str(e)}"
+            detail="An error occurred while processing your request. Please try again."
         )
 
 

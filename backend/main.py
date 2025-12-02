@@ -14,6 +14,7 @@ from app.services.startup_sync import sync_products_on_startup
 from app.utils.logger import setup_logging, get_logger
 from app.constants import STATUS_MESSAGE_HELLO
 from app.docs import get_scalar_html
+from app.middleware.validation import RequestValidationMiddleware, ErrorHandlingMiddleware
 
 # Setup logging first
 setup_logging()
@@ -60,7 +61,6 @@ async def lifespan(app: FastAPI):
             logger.info("Initial sync task created (running in background)")
         except Exception as e:
             logger.error(f"Failed to start initial sync: {e}", exc_info=True)
-            # Continue even if sync fails
     else:
         logger.info("Startup sync is disabled. Skipping initial product sync.")
     
@@ -111,6 +111,12 @@ async def scalar_html():
         openapi_schema=app.openapi(),
         title=app.title + " - API Documentation",
     )
+
+# Error handling middleware (should be first to catch all errors)
+app.add_middleware(ErrorHandlingMiddleware)
+
+# Request validation middleware
+app.add_middleware(RequestValidationMiddleware)
 
 # CORS middleware
 app.add_middleware(

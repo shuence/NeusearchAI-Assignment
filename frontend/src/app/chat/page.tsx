@@ -4,19 +4,61 @@ import { useState, useRef, useEffect } from "react";
 import { Header } from "@/components/layout/header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { ProductCarousel } from "@/components/features/products/product-carousel";
 import { sendChatMessage, type ChatMessage } from "@/lib/api/chat";
 import type { Product } from "@/types/product";
-import { Send, Loader2 } from "lucide-react";
+import { Send, Loader2, Sparkles } from "lucide-react";
+
+const SUGGESTIONS = [
+  "Show me gym wear that works for meetings",
+  "I need something for a formal event",
+  "What are your best sellers?",
+  "Show me casual everyday wear",
+  "I'm looking for workout clothes",
+  "What's trending right now?",
+];
+
+const STORAGE_KEY = "neusearch_chat_messages";
+
+const DEFAULT_MESSAGE: ChatMessage = {
+  role: "assistant",
+  content: "Hello! I'm your product recommendation assistant. How can I help you find the perfect products today?",
+  timestamp: new Date().toISOString(),
+};
+
+// Load messages from localStorage
+const loadMessagesFromStorage = (): ChatMessage[] => {
+  if (typeof window === "undefined") return [DEFAULT_MESSAGE];
+  
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      // Validate it's an array
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (error) {
+    console.error("Error loading messages from localStorage:", error);
+  }
+  return [DEFAULT_MESSAGE];
+};
+
+// Save messages to localStorage
+const saveMessagesToStorage = (messages: ChatMessage[]) => {
+  if (typeof window === "undefined") return;
+  
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+  } catch (error) {
+    console.error("Error saving messages to localStorage:", error);
+  }
+};
 
 export default function ChatPage() {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      role: "assistant",
-      content: "Hello! I'm your product recommendation assistant. How can I help you find the perfect products today?",
-      timestamp: new Date().toISOString(),
-    },
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>(loadMessagesFromStorage);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -25,6 +67,11 @@ export default function ChatPage() {
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
+
+  // Save messages to localStorage whenever they change
+  useEffect(() => {
+    saveMessagesToStorage(messages);
+  }, [messages]);
 
   useEffect(() => {
     scrollToBottom();
@@ -88,22 +135,30 @@ export default function ChatPage() {
     }
   };
 
+  const handleSuggestionClick = (suggestion: string) => {
+    setInput(suggestion);
+    inputRef.current?.focus();
+  };
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Header />
 
       <main className="container mx-auto px-4 py-8 flex-1 flex flex-col max-w-4xl">
         <div className="mb-6">
-          <h2 className="text-3xl font-bold mb-2">Chat Assistant</h2>
+          <div className="flex items-center gap-2 mb-2">
+            <Sparkles className="h-6 w-6 text-primary" />
+            <h2 className="text-3xl font-bold">AI Chat Assistant</h2>
+          </div>
           <p className="text-muted-foreground">
             Ask me anything about our products. I can help you find what you're looking for!
           </p>
         </div>
 
-        <Card className="flex-1 flex flex-col overflow-hidden">
+        <Card className="flex-1 flex flex-col overflow-hidden shadow-lg">
           <CardContent className="flex-1 flex flex-col p-0">
             {/* Messages Area */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-gradient-to-b from-background to-muted/20">
               {messages.map((message, index) => (
                 <div key={index} className="space-y-3">
                   {/* Message Bubble with Products Integrated */}
@@ -115,10 +170,10 @@ export default function ChatPage() {
                     <div
                       className={`max-w-[85%] ${
                         message.role === "user"
-                          ? "bg-primary text-primary-foreground rounded-lg px-4 py-3"
+                          ? "bg-primary text-primary-foreground rounded-2xl px-4 py-3 shadow-md"
                           : message.products && message.products.length > 0
-                          ? "bg-muted/50 backdrop-blur-sm rounded-2xl overflow-hidden shadow-sm"
-                          : "bg-muted text-foreground rounded-lg px-4 py-3"
+                          ? "bg-card border border-border/50 backdrop-blur-sm rounded-2xl overflow-hidden shadow-md"
+                          : "bg-muted text-foreground rounded-2xl px-4 py-3 shadow-sm"
                       }`}
                     >
                       {/* Message Text */}
@@ -152,8 +207,8 @@ export default function ChatPage() {
 
               {isLoading && (
                 <div className="flex justify-start">
-                  <div className="bg-muted rounded-lg px-4 py-2 flex items-center gap-2">
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                  <div className="bg-muted rounded-2xl px-4 py-3 flex items-center gap-2 shadow-sm">
+                    <Loader2 className="h-4 w-4 animate-spin text-primary" />
                     <span className="text-sm text-muted-foreground">
                       Thinking...
                     </span>
@@ -164,8 +219,29 @@ export default function ChatPage() {
               <div ref={messagesEndRef} />
             </div>
 
+            {/* Suggestions */}
+            {messages.filter((msg) => msg.role === "user").length === 0 && !isLoading && (
+              <div className="border-t border-border/50 px-4 pt-4 pb-2">
+                <p className="text-xs font-medium text-muted-foreground mb-3">
+                  Try asking:
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {SUGGESTIONS.map((suggestion, index) => (
+                    <Badge
+                      key={index}
+                      variant="outline"
+                      className="cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors text-xs py-1.5 px-3"
+                      onClick={() => handleSuggestionClick(suggestion)}
+                    >
+                      {suggestion}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Input Area */}
-            <div className="border-t p-4">
+            <div className="border-t border-border/50 bg-background p-4">
               <div className="flex gap-2">
                 <input
                   ref={inputRef}
@@ -174,13 +250,14 @@ export default function ChatPage() {
                   onChange={(e) => setInput(e.target.value)}
                   onKeyPress={handleKeyPress}
                   placeholder="Ask about products... (e.g., 'Looking for something I can wear in the gym and also in meetings')"
-                  className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="flex-1 rounded-lg border border-input bg-background px-4 py-2.5 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-all"
                   disabled={isLoading}
                 />
                 <Button
                   onClick={handleSend}
                   disabled={!input.trim() || isLoading}
                   size="icon"
+                  className="shrink-0"
                 >
                   {isLoading ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -189,7 +266,7 @@ export default function ChatPage() {
                   )}
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground mt-2">
+              <p className="text-xs text-muted-foreground mt-2 text-center">
                 Press Enter to send, Shift+Enter for new line
               </p>
             </div>

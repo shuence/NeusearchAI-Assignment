@@ -27,12 +27,40 @@ async def scrape_hunnit_products(
     
     Returns:
         ScrapeResponse with all scraped Hunnit products
+        
+    Raises:
+        HTTPException: If scraping fails or returns no products
     """
-    controller = HunnitController(db=db)
-    return await controller.scrape_all_products(
-        save_to_db=save_to_db,
-        save_to_redis=save_to_redis
-    )
+    try:
+        controller = HunnitController(db=db)
+        result = await controller.scrape_all_products(
+            save_to_db=save_to_db,
+            save_to_redis=save_to_redis
+        )
+        
+        if not result.success:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Scraping failed: {result.message}"
+            )
+        
+        if not result.products or len(result.products) == 0:
+            raise HTTPException(
+                status_code=404,
+                detail="No products found. The source may be unavailable or empty."
+            )
+        
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        from app.utils.logger import get_logger
+        logger = get_logger("hunnit_router")
+        logger.error(f"Error in scrape endpoint: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="An error occurred while scraping products. Please try again later."
+        )
 
 
 @router.get("", response_model=List[DBProduct])
@@ -52,7 +80,7 @@ async def get_all_products(
     controller = HunnitController(db=db)
     
     if from_db:
-        # Get from database
+        # Get all products from database
         db_products = controller.get_all_products_from_db()
         return [DBProduct.model_validate(product) for product in db_products]
     else:

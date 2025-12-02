@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Header } from "@/components/layout/header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ProductImageGallery } from "@/components/features/products/product-image-gallery";
+import { ProductImageCarousel } from "@/components/features/products/product-image-carousel";
 import { getProductById } from "@/lib/api/products";
 import { ROUTES } from "@/lib/constants";
 
@@ -16,15 +16,12 @@ export default async function ProductDetailPage({
 }: ProductDetailPageProps) {
   const { id } = await params;
 
-  // Try to fetch product by ID (can be UUID or external_id)
   const product = await getProductById(id, true);
 
   if (!product) {
     notFound();
   }
 
-  // Extract variants from attributes
-  // Variants are stored in product.attributes under the "variants" key
   let variants: Array<{
     title?: string;
     sku?: string;
@@ -42,7 +39,6 @@ export default async function ProductDetailPage({
   }> | undefined;
 
   if (product.attributes) {
-    // Check if variants exist in attributes
     const variantsKey = Object.keys(product.attributes).find(
       (key) => key.toLowerCase() === "variants"
     );
@@ -88,7 +84,7 @@ export default async function ProductDetailPage({
         </Link>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <ProductImageGallery
+          <ProductImageCarousel
             mainImage={product.image || product.imageUrl || "/placeholder.png"}
             imageUrls={product.image_urls}
             variants={variants}
@@ -170,7 +166,6 @@ export default async function ProductDetailPage({
                 <CardContent>
                   <dl className="space-y-4">
                     {Object.entries(product.attributes).map(([key, value]) => {
-                      // Handle arrays of objects (like variants)
                       if (Array.isArray(value) && value.length > 0 && typeof value[0] === "object") {
                         return (
                           <div key={key} className="space-y-2">
@@ -204,7 +199,6 @@ export default async function ProductDetailPage({
                         );
                       }
                       
-                      // Handle single objects (like options)
                       if (typeof value === "object" && value !== null && !Array.isArray(value)) {
                         const obj = value as Record<string, unknown>;
                         return (
@@ -235,7 +229,6 @@ export default async function ProductDetailPage({
                         );
                       }
                       
-                      // Handle arrays of primitives
                       if (Array.isArray(value)) {
                         return (
                           <div key={key} className="flex justify-between">
@@ -247,12 +240,10 @@ export default async function ProductDetailPage({
                         );
                       }
                       
-                      // Handle primitives and dates
                       let displayValue: string;
                       if (value === null || value === undefined) {
                         displayValue = "N/A";
                       } else if (typeof value === "string" && value.match(/^\d{4}-\d{2}-\d{2}T/)) {
-                        // Format ISO date strings
                         try {
                           const date = new Date(value);
                           displayValue = date.toLocaleString();
