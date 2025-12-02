@@ -1,7 +1,7 @@
 """RAG service for product recommendations using vector search and LLM."""
 import re
 import time
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 from sqlalchemy.orm import Session
 from google import genai
 from google.genai import types
@@ -345,6 +345,10 @@ Product {i}:
         query_lower = user_query.lower()
         is_color_query = any(keyword in query_lower for keyword in color_keywords)
         
+        # Check if query contains price-related terms
+        price_info = self._parse_price_query(user_query)
+        is_price_query = price_info and price_info.get("is_price_query", False)
+        
         color_emphasis = ""
         if is_color_query and not is_informational:
             color_emphasis = """
@@ -352,6 +356,24 @@ Product {i}:
     emphasize products that have that exact color available. The product cards will automatically show 
     the color-specific variant image when available. Make sure to highlight that these products come 
     in the requested color.
+"""
+        
+        price_emphasis = ""
+        if is_price_query and not is_informational:
+            price_constraints = []
+            if price_info.get("min_price"):
+                price_constraints.append(f"minimum ₹{price_info['min_price']:.0f}")
+            if price_info.get("max_price"):
+                price_constraints.append(f"maximum ₹{price_info['max_price']:.0f}")
+            
+            price_constraint_text = " and ".join(price_constraints) if price_constraints else "specific price range"
+            
+            price_emphasis = f"""
+13. PRICE QUERIES: The user is searching for products within a {price_constraint_text}. 
+    - Emphasize that the products shown match their price requirements
+    - Mention the price range in your response (e.g., "These products are all under ₹{price_info.get('max_price', 'N/A'):.0f}" or "These are budget-friendly options")
+    - Highlight value proposition when relevant
+    - If no products match the price criteria, explain this clearly and suggest adjusting the price range
 """
         
         informational_guidance = ""
@@ -385,6 +407,7 @@ IMPORTANT GUIDELINES:
 11. ANSWER QUESTIONS ABOUT PRODUCT DETAILS: If users ask about specific product details like colors, sizes, materials, or other attributes, provide that information directly from the product context provided. For example, if asked "What colors does this come in?" or "What sizes are available?", list the available options clearly.
 12. PRODUCT IMAGES: Product images are automatically displayed by the system below your response. You should NEVER say you cannot show images, cannot display products, or that showing images is beyond your capabilities. The system handles image display automatically - you just need to provide helpful responses about the products. If users ask to see products or images, simply provide a helpful response and the system will display the product cards with images automatically.
 {color_emphasis}
+{price_emphasis}
 {informational_guidance}
 EXAMPLES OF GOOD RESPONSES:
 - "I found some great options that work well for both gym workouts and professional meetings. These pieces combine athletic functionality with a polished look that transitions seamlessly from exercise to office."
@@ -442,6 +465,160 @@ Remember:
             user_prompt = f"Previous conversation:\n{history_text}\n\n{user_prompt}"
         
         return system_prompt + product_context + "\n\n" + user_prompt
+    
+    def _parse_price_query(self, query: str) -> Optional[Dict[str, Any]]:
+        """
+        Parse price-related information from user query.
+        
+        Returns:
+            Dict with price constraints:
+            - min_price: Optional minimum price
+            - max_price: Optional maximum price
+            - price_keywords: List of price-related keywords found
+            - is_price_query: Whether this is primarily a price query
+        """
+        if not query or not isinstance(query, str):
+            return None
+        
+        try:
+            query_lower = query.lower()
+            price_info = {
+                "min_price": None,
+                "max_price": None,
+                "price_keywords": [],
+                "is_price_query": False
+            }
+            
+            # Price-related keywords
+            price_keywords = [
+                "price", "cost", "budget", "cheap", "expensive", "affordable",
+                "under", "below", "over", "above", "between", "upto", "up to",
+                "less than", "more than", "maximum", "minimum", "max", "min",
+                "rupee", "rupees", "rs", "₹", "inr"
+            ]
+            
+            # Check if query contains price-related terms
+            found_keywords = [kw for kw in price_keywords if kw in query_lower]
+            if found_keywords:
+                price_info["price_keywords"] = found_keywords
+                price_info["is_price_query"] = True
+            
+            # Extract numeric price values (handle ₹, Rs, rupee formats)
+            # Pattern: (₹|Rs|rupee|rupees)?\s*(\d+([.,]\d+)?)
+            price_pattern = r'(?:₹|rs\.?|rupees?|inr)?\s*(\d+(?:[.,]\d+)?)'
+            price_matches = re.findall(price_pattern, query_lower, re.IGNORECASE)
+            
+            # Convert to float values
+            price_values = []
+            for match in price_matches:
+                try:
+                    # Remove commas and convert to float
+                    price_str = match.replace(',', '')
+                    price_val = float(price_str)
+                    if price_val > 0:
+                        price_values.append(price_val)
+                except (ValueError, TypeError):
+                    continue
+            
+            # Determine min/max based on context keywords
+            if price_values:
+                # Check for "under", "below", "less than", "upto", "up to", "maximum", "max"
+                if any(kw in query_lower for kw in ["under", "below", "less than", "upto", "up to", "maximum", "max"]):
+                    price_info["max_price"] = max(price_values)
+                
+                # Check for "over", "above", "more than", "minimum", "min"
+                elif any(kw in query_lower for kw in ["over", "above", "more than", "minimum", "min"]):
+                    price_info["min_price"] = min(price_values)
+                
+                # Check for "between" or "and" (range)
+                elif "between" in query_lower or (len(price_values) >= 2 and "and" in query_lower):
+                    price_values_sorted = sorted(price_values)
+                    price_info["min_price"] = price_values_sorted[0]
+                    price_info["max_price"] = price_values_sorted[-1]
+                
+                # If only one price value and query suggests upper bound
+                elif len(price_values) == 1:
+                    # Default: if keywords suggest upper bound, use as max
+                    if any(kw in query_lower for kw in ["under", "below", "less than", "upto", "up to"]):
+                        price_info["max_price"] = price_values[0]
+                    # Default: if keywords suggest lower bound, use as min
+                    elif any(kw in query_lower for kw in ["over", "above", "more than"]):
+                        price_info["min_price"] = price_values[0]
+                    # Default: treat as max price if no clear indication
+                    else:
+                        price_info["max_price"] = price_values[0]
+            
+            # Handle qualitative price terms
+            if not price_values:
+                if any(kw in query_lower for kw in ["cheap", "affordable", "budget", "low price", "low cost"]):
+                    price_info["max_price"] = 100  # Default: under ₹100 for "cheap"
+                    price_info["is_price_query"] = True
+                elif any(kw in query_lower for kw in ["expensive", "premium", "luxury", "high price", "high cost"]):
+                    price_info["min_price"] = 200  # Default: over ₹200 for "expensive"
+                    price_info["is_price_query"] = True
+            
+            return price_info if price_info["is_price_query"] or price_info["min_price"] or price_info["max_price"] else None
+            
+        except Exception as e:
+            logger.debug(f"Error parsing price query: {e}")
+            return None
+    
+    def _filter_by_price(
+        self,
+        products: List[Tuple[Product, float]],
+        min_price: Optional[float] = None,
+        max_price: Optional[float] = None
+    ) -> List[Tuple[Product, float]]:
+        """
+        Filter products by price range.
+        
+        Args:
+            products: List of (Product, score) tuples
+            min_price: Minimum price (inclusive)
+            max_price: Maximum price (inclusive)
+        
+        Returns:
+            Filtered list of (Product, score) tuples
+        """
+        if not products:
+            return []
+        
+        if min_price is None and max_price is None:
+            return products
+        
+        filtered = []
+        for product, score in products:
+            if product is None:
+                continue
+            
+            try:
+                price = product.price
+                if price is None:
+                    # If price is missing and we have constraints, skip it
+                    # unless we're being lenient (only max constraint)
+                    if min_price is not None:
+                        continue
+                    # If only max_price constraint, include products without price
+                    if max_price is not None:
+                        filtered.append((product, score))
+                    continue
+                
+                price_float = float(price)
+                
+                # Check price constraints
+                if min_price is not None and price_float < min_price:
+                    continue
+                if max_price is not None and price_float > max_price:
+                    continue
+                
+                # Product passes price filter
+                filtered.append((product, score))
+                
+            except (ValueError, TypeError) as e:
+                logger.debug(f"Error processing price for product {product.id}: {e}")
+                continue
+        
+        return filtered
     
     def _calculate_optimal_threshold(self, query: str, initial_result_count: int = 0) -> float:
         """Calculate optimal similarity threshold based on query characteristics."""
@@ -660,6 +837,51 @@ Remember:
                 except Exception as e:
                     logger.warning(f"Error in retry search: {e}, using original results")
             
+            # Parse price query if present
+            price_info = self._parse_price_query(user_query)
+            
+            # Apply price filtering if price constraints are present
+            if price_info and (price_info.get("min_price") is not None or price_info.get("max_price") is not None):
+                logger.info(f"Applying price filter: min={price_info.get('min_price')}, max={price_info.get('max_price')}")
+                search_results = self._filter_by_price(
+                    search_results,
+                    min_price=price_info.get("min_price"),
+                    max_price=price_info.get("max_price")
+                )
+                # If price filtering removed too many results, try to get more
+                if len(search_results) < max_results:
+                    logger.info(f"Price filter reduced results to {len(search_results)}, fetching more candidates")
+                    try:
+                        # Get more candidates with lower threshold
+                        additional_results = self.vector_search.search_by_query_text(
+                            query_text=user_query,
+                            limit=max_results * 3,  # Get more candidates
+                            similarity_threshold=max(0.3, similarity_threshold - 0.15),
+                            enhance_query=True
+                        )
+                        # Apply price filter to additional results
+                        additional_results = self._filter_by_price(
+                            additional_results,
+                            min_price=price_info.get("min_price"),
+                            max_price=price_info.get("max_price")
+                        )
+                        # Combine and deduplicate by product ID
+                        seen_ids = set()
+                        combined_results = []
+                        for product, score in search_results:
+                            if product and product.id not in seen_ids:
+                                seen_ids.add(product.id)
+                                combined_results.append((product, score))
+                        for product, score in additional_results:
+                            if product and product.id not in seen_ids:
+                                seen_ids.add(product.id)
+                                combined_results.append((product, score))
+                        # Sort by score and limit
+                        combined_results.sort(key=lambda x: x[1], reverse=True)
+                        search_results = combined_results[:max_results * 2]
+                    except Exception as e:
+                        logger.warning(f"Error fetching additional price-filtered results: {e}")
+            
             # Limit to max_results and extract products
             search_results = search_results[:max_results]
             products = [product for product, score in search_results]
@@ -672,8 +894,21 @@ Remember:
             
             if not products:
                 # No products found - return a helpful message
+                # price_info is already parsed above, reuse it
+                if price_info and (price_info.get("min_price") is not None or price_info.get("max_price") is not None):
+                    # Price filter was applied but no products matched
+                    price_msg_parts = []
+                    if price_info.get("min_price"):
+                        price_msg_parts.append(f"above ₹{price_info['min_price']:.0f}")
+                    if price_info.get("max_price"):
+                        price_msg_parts.append(f"under ₹{price_info['max_price']:.0f}")
+                    price_constraint = " and ".join(price_msg_parts)
+                    response_msg = f"I couldn't find any products matching your query with prices {price_constraint}. Could you try adjusting your price range or be more specific about what you're looking for?"
+                else:
+                    response_msg = "I couldn't find any products matching your query. Could you try rephrasing your request or be more specific about what you're looking for?"
+                
                 return {
-                    "response": "I couldn't find any products matching your query. Could you try rephrasing your request or be more specific about what you're looking for?",
+                    "response": response_msg,
                     "products": [],
                     "needs_clarification": False,
                     "scores": []
