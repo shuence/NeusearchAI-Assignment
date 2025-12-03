@@ -19,51 +19,30 @@ Neusearch/
 └── frontend/         # Next.js frontend application
     ├── src/
     │   ├── app/      # Next.js App Router
-    │   │   ├── layout.tsx
-    │   │   ├── page.tsx          # Home page
-    │   │   ├── globals.css
+    │   │   ├── cart/
+    │   │   ├── chat/
+    │   │   ├── checkout/
+    │   │   ├── compare/
+    │   │   ├── order-success/
+    │   │   ├── orders/
+    │   │   │   └── [id]/
     │   │   ├── products/
     │   │   │   └── [id]/
-    │   │   │       └── page.tsx   # Product detail page
-    │   │   ├── chat/
-    │   │   │   └── page.tsx       # Chat interface
-    │   │   ├── compare/
-    │   │   │   └── page.tsx       # Product comparison page
-    │   │   ├── cart/
-    │   │   │   └── page.tsx       # Shopping cart page
-    │   │   ├── checkout/
-    │   │   │   └── page.tsx       # Checkout page
-    │   │   ├── orders/
-    │   │   │   ├── page.tsx       # Order history page
-    │   │   │   └── [id]/
-    │   │   │       └── page.tsx   # Order detail page
-    │   │   ├── order-success/
-    │   │   │   └── page.tsx       # Order confirmation page
-    │   │   └── not-found.tsx      # 404 page
+    │   │   └── status/
     │   ├── components/
     │   │   ├── ui/                # shadcn/ui components
     │   │   ├── layout/            # Layout components (header, footer)
+    │   │   ├── providers/
     │   │   └── features/          # Feature-specific components
     │   │       ├── products/      # Product-related components
     │   │       └── chat/          # Chat components
     │   ├── contexts/              # React contexts
-    │   │   ├── cart-context.tsx   # Shopping cart state
-    │   │   ├── comparison-context.tsx  # Product comparison state
-    │   │   └── order-context.tsx   # Order management state
+    │   ├── data/                  # Dummy/mock data
     │   ├── lib/
-    │   │   ├── utils.ts           # Utility functions
-    │   │   ├── constants.ts       # App constants
-    │   │   └── api/               # API client functions
-    │   ├── types/                 # TypeScript type definitions
-    │   └── data/                  # Dummy/mock data
-    │       └── products.ts        # Product dummy data
-    ├── public/       # Static assets
-    ├── components.json  # shadcn/ui configuration
-    ├── next.config.ts
-    ├── tailwind.config.ts
-    ├── tsconfig.json
-    ├── package.json
-    └── pnpm-lock.yaml
+    │   │   ├── api/               # API client functions
+    │   │   └── utils/             # Utility functions
+    │   └── types/                 # TypeScript type definitions
+    └── public/                    # Static assets
 ```
 
 ## Prerequisites
